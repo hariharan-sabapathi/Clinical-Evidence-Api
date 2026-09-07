@@ -10,8 +10,7 @@ actually show up in production (streaming, semantic caching, PHI
 redaction, circuit breaking). Built for clinicians and the engineers
 who have to keep this kind of system honest under audit.
 
-**Live:** https://clinical-evidence-api.onrender.com/docs (~60s cold
-start — free tier sleeps after inactivity)
+**Live:** https://clinical-evidence-api.onrender.com/docs
 
 **Demo credentials** (email / password):
 
