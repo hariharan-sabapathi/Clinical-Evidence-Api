@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+
+# Raw FHIR export — reproducible via scripts/fetch_data.sh, not versioned (170MB+)
+data/raw/
+
+# Built indexes and chunk caches — reproducible via the corpus pipeline
+data/chunks/
+data/index/
+
+# Fine-tuned model weights
+finetune/output/
+*.faiss
+
+# clinical-evidence-api service
+dump.rdb
+*.rdb
+.env
+.env.*
+!.env.example
+htmlcov/
+.coverage
+alembic/versions/__pycache__/
+build/

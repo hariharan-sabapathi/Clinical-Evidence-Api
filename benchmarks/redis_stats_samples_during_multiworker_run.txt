@@ -1,0 +1,15 @@
+1788731473 instantaneous_ops_per_sec:1191 connected_clients:61
+1788731483 instantaneous_ops_per_sec:1209 connected_clients:61
+1788731493 instantaneous_ops_per_sec:1199 connected_clients:61
+1788731503 instantaneous_ops_per_sec:861 connected_clients:61
+1788731513 instantaneous_ops_per_sec:857 connected_clients:61
+1788731523 instantaneous_ops_per_sec:875 connected_clients:61
+1788731533 instantaneous_ops_per_sec:885 connected_clients:61
+1788731543 instantaneous_ops_per_sec:821 connected_clients:61
+1788731554 instantaneous_ops_per_sec:800 connected_clients:61
+1788731564 instantaneous_ops_per_sec:867 connected_clients:63
+1788731574 instantaneous_ops_per_sec:857 connected_clients:63
+1788731584 instantaneous_ops_per_sec:845 connected_clients:63
+1788731594 instantaneous_ops_per_sec:914 connected_clients:63
+1788731604 instantaneous_ops_per_sec:834 connected_clients:63
+1788731614 instantaneous_ops_per_sec:834 connected_clients:63

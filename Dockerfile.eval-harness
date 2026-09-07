@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# git is needed by scripts/fetch_data.sh (clones the raw FHIR export)
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt pyproject.toml ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ src/
+COPY scripts/ scripts/
+COPY configs/ configs/
+COPY tests/ tests/
+
+ENV PYTHONPATH=/app/src
+
+# Data (data/raw, data/eval_set.jsonl, data/splits.yml) and results/ are
+# mounted from the host by docker-compose.yml rather than baked into the
+# image — the raw FHIR export alone is ~170MB and is meant to stay
+# reproducible via scripts/fetch_data.sh, not shipped in a container layer.
+
+CMD ["python3", "-m", "pytest", "tests/", "-v"]

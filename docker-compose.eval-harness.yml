@@ -1,0 +1,19 @@
+services:
+  clinical-retrieval:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+    environment:
+      # Set to enable LLM answer generation — see generation/llm_client.py
+      # and README "Environment constraints". Retrieval works without it.
+      - LLM_API_KEY=${LLM_API_KEY:-}
+    command: >
+      sh -c "
+        [ -f data/raw/Patient.000.ndjson ] || ./scripts/fetch_data.sh &&
+        python3 scripts/build_eval_set.py &&
+        python3 scripts/run_ablations.py &&
+        python3 scripts/run_extra_analyses.py &&
+        python3 scripts/label_failures.py &&
+        python3 -m clinical_retrieval.eval.report --out results/report.html
+      "

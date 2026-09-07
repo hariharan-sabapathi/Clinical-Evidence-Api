@@ -1,0 +1,99 @@
+[project]
+name = "clinical-retrieval"
+version = "0.1.0"
+description = "Retrieval benchmark over synthetic clinical notes with an evaluation harness built on independent structured FHIR ground truth."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "rank-bm25>=0.2.2",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+llm = [
+    "openai>=1.0",
+]
+dev = [
+    "pytest>=7.4",
+]
+service = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "sqlalchemy[asyncio]>=2.0.35",
+    "asyncpg>=0.29",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.13",
+    "pgvector>=0.3.6",
+    "redis>=5.0",
+    "arq>=0.26",
+    "pyjwt>=2.9",
+    "passlib[bcrypt]>=1.7",
+    "bcrypt==4.0.1",
+    "python-multipart>=0.0.9",
+    "email-validator>=2.2",
+    "prometheus-client>=0.20",
+    "httpx>=0.27",
+]
+service-dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "testcontainers[postgres,redis]>=4.8",
+    "hypothesis>=6.112",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["clinical_retrieval*"]
+
+[tool.setuptools.package-data]
+clinical_retrieval = ["py.typed"]
+
+[tool.ruff]
+line-length = 115
+target-version = "py312"
+
+[tool.ruff.lint]
+# A deliberately modest set: correctness (E/F/B), unused-import hygiene,
+# and modern-syntax nudges (UP). Left off: import-sort (I), broad-except
+# style nags (BLE/TRY), and timezone pedantry (DTZ) -- those fight this
+# codebase's actual conventions (grouped-by-origin imports, deliberate
+# broad `except Exception` at circuit-breaker/retry boundaries) rather
+# than catching real bugs.
+select = ["E", "F", "B", "UP", "W"]
+ignore = [
+    "E501",   # line-length is a formatter's job, not a lint gate
+    "UP046",  # PEP 695 generics for Page[T]: untested against FastAPI's generic-model machinery
+    "UP042",  # StrEnum: str-Enum multiple inheritance is deliberate for JSON-serializable state values
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom is `param: X = Depends(...)` --
+# a function call in an argument default that B008 would otherwise flag,
+# but it's the framework's documented pattern, not a mutable-default bug.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+exclude = ["alembic/versions/", "scripts/"]
+
+[tool.pytest.ini_options]
+# So `python -m pytest` works standalone from the repo root — no manual
+# PYTHONPATH=src and no editable install required first. "." is on the
+# path too so `app` (the FastAPI service, a plain top-level package rather
+# than an installed one) imports the same way in tests as it does under
+# uvicorn.
+pythonpath = ["src", "."]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires Postgres and Redis (testcontainers by default; set TEST_DATABASE_URL/TEST_REDIS_URL to point at already-running services instead)",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

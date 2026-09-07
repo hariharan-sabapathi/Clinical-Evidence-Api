@@ -1,0 +1,84 @@
+x-service-env: &service-env
+  DATABASE_URL: postgresql+asyncpg://clinical_runtime:runtimepassword@postgres:5432/clinical_evidence
+  DATABASE_URL_MIGRATOR: postgresql+asyncpg://clinical_app:devpassword@postgres:5432/clinical_evidence
+  REDIS_URL: redis://redis:6379/0
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-every-real-deployment}
+  APP_ENV: development
+  LLM_MODEL: ${LLM_MODEL:-not-configured}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: clinical_evidence
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d clinical_evidence"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    environment: *service-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["alembic", "upgrade", "head"]
+
+  api:
+    build: .
+    environment: *service-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build: .
+    environment: *service-env
+    entrypoint: ["arq", "app.workers.settings.WorkerSettings"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Optional: `docker compose --profile seed up seed` populates demo users/
+  # patients/documents for the curl tour in the README. Not part of the
+  # default `docker compose up`.
+  seed:
+    build: .
+    environment: *service-env
+    entrypoint: ["python", "scripts/seed_demo_data.py"]
+    profiles: ["seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

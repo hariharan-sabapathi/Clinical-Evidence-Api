@@ -1,0 +1,10 @@
+# Core — runs everywhere, no GPU or model downloads required
+rank-bm25>=0.2.2
+numpy>=1.24
+pyyaml>=6.0
+
+# LLM answer generation — needs an LLM API key (retrieval works without it)
+# openai>=1.0
+
+# Dev / tests
+pytest>=7.4

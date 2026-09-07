@@ -1,0 +1,5 @@
+comparison,n,mean_a,mean_b,diff_mean,ci_lo,ci_hi,significant_95pct
+within_patient_vs_cross_patient (recall_strict@5),29,0.7931,0.7241,0.069,0.0,0.1724,False
+top_k=10_vs_top_k=5 (recall_strict),29,0.9655,0.7241,0.2414,0.1034,0.4138,True
+baseline_fixed_512_vs_full_note (recall_strict@5),29,0.7241,0.4138,0.3103,0.1379,0.4828,True
+bm25+patient_filter_vs_bm25 (recall_strict@5),29,0.7931,0.7241,0.069,0.0,0.1724,False
