@@ -97,6 +97,9 @@ the top of that document.
 | throughput | 97.6 req/s | 93.7 req/s | **220.1 req/s** |
 | requests in flight (Little's Law, L = throughput × latency) | ≈26 | ≈27 | ≈1.9 |
 
+The cache referenced in this benchmark was later removed from the
+service; see `benchmarks/README.md` for the note on configuration drift.
+
 † **This column is one run, not a settled number.** Two later re-runs of
 the identical config, done to investigate its `max=639ms` tail, both show
 a sustained elevated-latency period this run didn't — the honest range is

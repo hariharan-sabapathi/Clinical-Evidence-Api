@@ -3,7 +3,7 @@ picked deliberately for a 25ms-2s service, not left at the client's default
 (.005 .. 10s) buckets, which would put almost every real observation in the
 service's normal range into one or two buckets and make the p95/p99
 `histogram_quantile` estimate nearly meaningless. 25ms is roughly the floor
-for a cache-hit query; 2s is the point past which we'd rather see an alert
+for a simple, fast query; 2s is the point past which we'd rather see an alert
 than a finer-grained bucket.
 """
 
