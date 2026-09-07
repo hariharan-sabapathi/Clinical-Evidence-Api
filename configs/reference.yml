@@ -1,0 +1,25 @@
+# The fixed reference configuration ablations are measured against (§6.2) —
+# and the §4.1 baseline itself: fixed_512 chunking, BM25, top-5. Every other
+# number in results/ablations.csv is measured against this one. Ablate one
+# axis at a time from this config, not the full cross-product.
+chunk_level: fixed_512
+data_dir: data
+raw_dir: data/raw
+eval_set_path: data/eval_set.jsonl
+splits_path: data/splits.yml
+
+retrieval:
+  retriever: bm25   # the only retriever this project implements
+  top_k: 5
+  patient_filter: false
+
+# LLM generation is off unless $LLM_API_KEY is set — see
+# generation/llm_client.py and README §14. With no key, generation degrades
+# to retrieval-only (NullLLMClient); retrieval itself never needs an LLM.
+#
+# llm_model is a real OpenAI-compatible model id (not the "not-configured"
+# sentinel) so that exporting LLM_API_KEY is genuinely enough to turn
+# generation on — no other edit needed. Change it (and llm_base_url) if
+# you're pointing at a different OpenAI-compatible provider/gateway.
+llm_model: gpt-4o-mini
+llm_base_url: null

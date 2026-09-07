@@ -1,0 +1,302 @@
+[
+  {
+    "email": "bench.clinician.0@example.org",
+    "password": "bench-pass",
+    "patient_id": "4f622854-129c-45ec-b33f-663d35da612b"
+  },
+  {
+    "email": "bench.clinician.1@example.org",
+    "password": "bench-pass",
+    "patient_id": "3d4ea833-acdf-49ec-9ba1-6b66eb96f7f8"
+  },
+  {
+    "email": "bench.clinician.2@example.org",
+    "password": "bench-pass",
+    "patient_id": "bd9aede4-c0bd-4318-96a4-ec9a30f65649"
+  },
+  {
+    "email": "bench.clinician.3@example.org",
+    "password": "bench-pass",
+    "patient_id": "e4ef2441-8d5c-412e-8e67-fb8278b5c3e2"
+  },
+  {
+    "email": "bench.clinician.4@example.org",
+    "password": "bench-pass",
+    "patient_id": "66c5cbfd-ca92-4fdc-8d68-e3ee82df4b0a"
+  },
+  {
+    "email": "bench.clinician.5@example.org",
+    "password": "bench-pass",
+    "patient_id": "7299a7ff-c10b-4a85-b57b-9e4c08ac933f"
+  },
+  {
+    "email": "bench.clinician.6@example.org",
+    "password": "bench-pass",
+    "patient_id": "5114d74e-4f8c-45fa-a407-c952ff052565"
+  },
+  {
+    "email": "bench.clinician.7@example.org",
+    "password": "bench-pass",
+    "patient_id": "a485a0e6-7bb7-45fd-94d8-7f80d5e98ad0"
+  },
+  {
+    "email": "bench.clinician.8@example.org",
+    "password": "bench-pass",
+    "patient_id": "34dc258c-54b1-44a1-b8ae-fcaa61086e2c"
+  },
+  {
+    "email": "bench.clinician.9@example.org",
+    "password": "bench-pass",
+    "patient_id": "f0b46d5e-3467-41d6-b701-59b3ad7d0c54"
+  },
+  {
+    "email": "bench.clinician.10@example.org",
+    "password": "bench-pass",
+    "patient_id": "d46d70a1-3df1-48a7-9427-f1add7943c81"
+  },
+  {
+    "email": "bench.clinician.11@example.org",
+    "password": "bench-pass",
+    "patient_id": "632615dd-0723-4004-bf9f-143141146782"
+  },
+  {
+    "email": "bench.clinician.12@example.org",
+    "password": "bench-pass",
+    "patient_id": "8be462c3-7692-40ab-ba4d-baa6c08c6e42"
+  },
+  {
+    "email": "bench.clinician.13@example.org",
+    "password": "bench-pass",
+    "patient_id": "751a2bee-ca6b-4c78-82e7-3fa54578314c"
+  },
+  {
+    "email": "bench.clinician.14@example.org",
+    "password": "bench-pass",
+    "patient_id": "f1094e92-a4da-4be3-9c43-cf581993c65e"
+  },
+  {
+    "email": "bench.clinician.15@example.org",
+    "password": "bench-pass",
+    "patient_id": "8c0f7cbb-b899-4559-98e7-7801d52aabd4"
+  },
+  {
+    "email": "bench.clinician.16@example.org",
+    "password": "bench-pass",
+    "patient_id": "ded7cc69-0ccc-42f2-8087-f967ddc57980"
+  },
+  {
+    "email": "bench.clinician.17@example.org",
+    "password": "bench-pass",
+    "patient_id": "a297a0b5-e40c-4fa6-a23c-4d8af785c0a7"
+  },
+  {
+    "email": "bench.clinician.18@example.org",
+    "password": "bench-pass",
+    "patient_id": "51b31039-d034-40b9-a0e0-e61a072962a7"
+  },
+  {
+    "email": "bench.clinician.19@example.org",
+    "password": "bench-pass",
+    "patient_id": "0bc8f135-9511-4a03-9720-a6eac404dcc7"
+  },
+  {
+    "email": "bench.clinician.20@example.org",
+    "password": "bench-pass",
+    "patient_id": "1e4a5855-bbd5-46c8-b5cf-206f949dd110"
+  },
+  {
+    "email": "bench.clinician.21@example.org",
+    "password": "bench-pass",
+    "patient_id": "546c8681-c5e0-4b48-bc2f-43be1fdb1c76"
+  },
+  {
+    "email": "bench.clinician.22@example.org",
+    "password": "bench-pass",
+    "patient_id": "150765e7-fe4f-4075-8977-282b855934b3"
+  },
+  {
+    "email": "bench.clinician.23@example.org",
+    "password": "bench-pass",
+    "patient_id": "05206175-a7b6-4b25-9d77-e027e038cf57"
+  },
+  {
+    "email": "bench.clinician.24@example.org",
+    "password": "bench-pass",
+    "patient_id": "419db610-20f3-42e4-bcf2-17480d4c54b6"
+  },
+  {
+    "email": "bench.clinician.25@example.org",
+    "password": "bench-pass",
+    "patient_id": "df7ca3dd-6c66-47f7-a996-60ce4f9d3f1d"
+  },
+  {
+    "email": "bench.clinician.26@example.org",
+    "password": "bench-pass",
+    "patient_id": "db06e803-3c11-4653-98bb-5d9b1c19a240"
+  },
+  {
+    "email": "bench.clinician.27@example.org",
+    "password": "bench-pass",
+    "patient_id": "0bcbf64e-d69d-47f1-a9ae-30b00e09064d"
+  },
+  {
+    "email": "bench.clinician.28@example.org",
+    "password": "bench-pass",
+    "patient_id": "fe05efa2-eba5-4f40-a487-1779350706ec"
+  },
+  {
+    "email": "bench.clinician.29@example.org",
+    "password": "bench-pass",
+    "patient_id": "354ce437-6c86-4179-8c07-07b35a35948b"
+  },
+  {
+    "email": "bench.clinician.30@example.org",
+    "password": "bench-pass",
+    "patient_id": "3ef30120-236e-4c06-bd0c-7ff2f3e7ea46"
+  },
+  {
+    "email": "bench.clinician.31@example.org",
+    "password": "bench-pass",
+    "patient_id": "0f928194-8e9c-441b-abd5-231cb51dc188"
+  },
+  {
+    "email": "bench.clinician.32@example.org",
+    "password": "bench-pass",
+    "patient_id": "e85a3e64-035a-44e1-895e-9fd8ac8f1ca2"
+  },
+  {
+    "email": "bench.clinician.33@example.org",
+    "password": "bench-pass",
+    "patient_id": "d6df458f-550c-4e07-a7a8-6533c2f2f40d"
+  },
+  {
+    "email": "bench.clinician.34@example.org",
+    "password": "bench-pass",
+    "patient_id": "52aced3d-63fd-40c6-8b07-e4efaad8de9d"
+  },
+  {
+    "email": "bench.clinician.35@example.org",
+    "password": "bench-pass",
+    "patient_id": "0e26d11c-51e2-4df9-9da0-be4a99271c1f"
+  },
+  {
+    "email": "bench.clinician.36@example.org",
+    "password": "bench-pass",
+    "patient_id": "29d6678a-5c0f-4cfe-98a2-2b77ebf01e9a"
+  },
+  {
+    "email": "bench.clinician.37@example.org",
+    "password": "bench-pass",
+    "patient_id": "c655d525-145d-4ac6-ac08-94deb36c7ff5"
+  },
+  {
+    "email": "bench.clinician.38@example.org",
+    "password": "bench-pass",
+    "patient_id": "4a4ded21-e921-406e-9749-026c162e3929"
+  },
+  {
+    "email": "bench.clinician.39@example.org",
+    "password": "bench-pass",
+    "patient_id": "4be677d1-29d3-477d-9ca2-97fbbbf815bd"
+  },
+  {
+    "email": "bench.clinician.40@example.org",
+    "password": "bench-pass",
+    "patient_id": "89e7c80f-de0d-438d-9124-5dc279703b2b"
+  },
+  {
+    "email": "bench.clinician.41@example.org",
+    "password": "bench-pass",
+    "patient_id": "15672195-353e-4a44-9d66-f7eee2d2f071"
+  },
+  {
+    "email": "bench.clinician.42@example.org",
+    "password": "bench-pass",
+    "patient_id": "93298fe2-8411-469c-b349-223d609a24f4"
+  },
+  {
+    "email": "bench.clinician.43@example.org",
+    "password": "bench-pass",
+    "patient_id": "73f567b7-c1e3-46df-bc4a-2ba1caf9a5a1"
+  },
+  {
+    "email": "bench.clinician.44@example.org",
+    "password": "bench-pass",
+    "patient_id": "5724283b-22bb-4edf-b236-597351c842a0"
+  },
+  {
+    "email": "bench.clinician.45@example.org",
+    "password": "bench-pass",
+    "patient_id": "28edf56b-05b3-4d3d-801c-77e564b46ce7"
+  },
+  {
+    "email": "bench.clinician.46@example.org",
+    "password": "bench-pass",
+    "patient_id": "89e1a0c2-1489-4dc4-99ab-f6d8bfbd27e0"
+  },
+  {
+    "email": "bench.clinician.47@example.org",
+    "password": "bench-pass",
+    "patient_id": "d7bd329c-1275-4281-820f-144773335214"
+  },
+  {
+    "email": "bench.clinician.48@example.org",
+    "password": "bench-pass",
+    "patient_id": "3f574d8a-ae0d-4ba5-bb9b-ca4281add781"
+  },
+  {
+    "email": "bench.clinician.49@example.org",
+    "password": "bench-pass",
+    "patient_id": "7bfa6fb7-53e8-4af8-96d5-ec10f3234cd6"
+  },
+  {
+    "email": "bench.clinician.50@example.org",
+    "password": "bench-pass",
+    "patient_id": "df78a4ae-c565-44b4-9e6b-ba0068ae0507"
+  },
+  {
+    "email": "bench.clinician.51@example.org",
+    "password": "bench-pass",
+    "patient_id": "9bcb67e0-86ec-4efc-b7ae-8be35c4ebc1a"
+  },
+  {
+    "email": "bench.clinician.52@example.org",
+    "password": "bench-pass",
+    "patient_id": "4f5c47db-973f-49ea-9437-6c50d09c7afd"
+  },
+  {
+    "email": "bench.clinician.53@example.org",
+    "password": "bench-pass",
+    "patient_id": "307a028d-bb65-48cb-b2a0-f6201ac3805e"
+  },
+  {
+    "email": "bench.clinician.54@example.org",
+    "password": "bench-pass",
+    "patient_id": "8102526b-6aed-4029-9551-d915b8b78040"
+  },
+  {
+    "email": "bench.clinician.55@example.org",
+    "password": "bench-pass",
+    "patient_id": "da2f5c2e-2b8c-4389-a386-90cf51788c7c"
+  },
+  {
+    "email": "bench.clinician.56@example.org",
+    "password": "bench-pass",
+    "patient_id": "dddae550-5209-48be-afbb-1ee7b158a03c"
+  },
+  {
+    "email": "bench.clinician.57@example.org",
+    "password": "bench-pass",
+    "patient_id": "56e2292b-66a9-41a7-9dc4-31be71476d50"
+  },
+  {
+    "email": "bench.clinician.58@example.org",
+    "password": "bench-pass",
+    "patient_id": "1240d933-2d13-4762-8398-a7f2d560598c"
+  },
+  {
+    "email": "bench.clinician.59@example.org",
+    "password": "bench-pass",
+    "patient_id": "3282f34b-bcb8-423b-9682-5f1e0ef170be"
+  }
+]

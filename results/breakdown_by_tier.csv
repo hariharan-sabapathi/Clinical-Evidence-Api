@@ -1,0 +1,5 @@
+group,n,recall_lenient@5,recall_lenient@5_ci_lo,recall_lenient@5_ci_hi,recall_strict@5,recall_strict@5_ci_lo,recall_strict@5_ci_hi,lenient_minus_strict@5,mrr_lenient,mrr_strict,ndcg_lenient,ndcg_strict
+tier_0,3,1.0,1.0,1.0,0.3333,0.0,1.0,0.6667,0.6111,0.1958,0.743,0.3393
+tier_1,9,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.7778,0.6889,0.736,0.7468
+tier_2,8,1.0,1.0,1.0,0.625,0.25,0.875,0.375,0.9375,0.397,0.831,0.4225
+tier_3,9,0.6667,0.3333,1.0,0.6667,0.3333,1.0,0.0,0.6605,0.6049,0.6815,0.5958

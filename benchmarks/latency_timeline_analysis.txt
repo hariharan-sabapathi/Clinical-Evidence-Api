@@ -1,0 +1,84 @@
+=== Run A: 4 workers, +cache +HNSW, Redis default RDB autosave (save 3600 1 300 100 60 10000) (32598 requests) ===
+t=[  0,  5)s  n=  19  max=  368.07ms  p95= 368.07ms  avg=274.08ms  <<< ELEVATED
+t=[  5, 10)s  n=  19  max=  266.73ms  p95= 266.73ms  avg=263.70ms  <<< ELEVATED
+t=[ 10, 15)s  n=  19  max=  267.13ms  p95= 267.13ms  avg=264.19ms  <<< ELEVATED
+t=[ 15, 20)s  n= 619  max= 1279.56ms  p95= 733.82ms  avg=156.05ms  <<< ELEVATED
+t=[ 20, 25)s  n=1184  max=  128.71ms  p95=  26.06ms  avg= 10.61ms
+t=[ 25, 30)s  n=1197  max=   33.61ms  p95=  16.46ms  avg=  8.01ms
+t=[ 30, 35)s  n=1197  max=   54.36ms  p95=  15.29ms  avg=  8.06ms
+t=[ 35, 40)s  n=1204  max=   28.83ms  p95=  11.93ms  avg=  6.95ms
+t=[ 40, 45)s  n=1207  max=   58.55ms  p95=  10.80ms  avg=  6.88ms
+t=[ 45, 50)s  n=1077  max=  409.95ms  p95= 269.09ms  avg= 32.45ms  <<< ELEVATED
+t=[ 50, 55)s  n= 836  max=  419.67ms  p95= 380.60ms  avg= 92.76ms  <<< ELEVATED
+t=[ 55, 60)s  n= 846  max=  409.28ms  p95= 373.62ms  avg= 93.52ms  <<< ELEVATED
+t=[ 60, 65)s  n= 858  max=  405.70ms  p95= 361.45ms  avg= 90.19ms  <<< ELEVATED
+t=[ 65, 70)s  n= 858  max=  399.26ms  p95= 362.91ms  avg= 94.98ms  <<< ELEVATED
+t=[ 70, 75)s  n= 846  max=  422.05ms  p95= 379.90ms  avg= 88.88ms  <<< ELEVATED
+t=[ 75, 80)s  n= 867  max=  414.23ms  p95= 376.13ms  avg= 96.81ms  <<< ELEVATED
+t=[ 80, 85)s  n= 850  max=  417.29ms  p95= 369.73ms  avg= 86.47ms  <<< ELEVATED
+t=[ 85, 90)s  n= 855  max=  417.64ms  p95= 369.76ms  avg= 93.27ms  <<< ELEVATED
+t=[ 90, 95)s  n= 868  max=  418.09ms  p95= 367.34ms  avg= 87.37ms  <<< ELEVATED
+t=[ 95,100)s  n= 834  max=  388.04ms  p95= 373.87ms  avg= 90.46ms  <<< ELEVATED
+t=[100,105)s  n= 867  max=  413.44ms  p95= 369.94ms  avg= 95.21ms  <<< ELEVATED
+t=[105,110)s  n= 832  max=  444.46ms  p95= 375.89ms  avg= 92.52ms  <<< ELEVATED
+t=[110,115)s  n= 865  max=  411.45ms  p95= 377.82ms  avg= 96.69ms  <<< ELEVATED
+t=[115,120)s  n= 848  max=  403.68ms  p95= 363.38ms  avg= 86.23ms  <<< ELEVATED
+t=[120,125)s  n= 878  max=  424.52ms  p95= 371.36ms  avg= 93.06ms  <<< ELEVATED
+t=[125,130)s  n= 842  max=  421.91ms  p95= 389.51ms  avg= 90.37ms  <<< ELEVATED
+t=[130,135)s  n= 858  max=  441.74ms  p95= 366.67ms  avg= 96.52ms  <<< ELEVATED
+t=[135,140)s  n= 853  max=  405.21ms  p95= 355.71ms  avg= 83.36ms  <<< ELEVATED
+t=[140,145)s  n= 866  max=  410.30ms  p95= 369.01ms  avg= 94.74ms  <<< ELEVATED
+t=[145,150)s  n= 857  max=  399.56ms  p95= 361.46ms  avg= 85.03ms  <<< ELEVATED
+t=[150,155)s  n= 869  max=  407.36ms  p95= 371.60ms  avg= 92.49ms  <<< ELEVATED
+t=[155,160)s  n= 847  max=  412.89ms  p95= 368.09ms  avg= 87.71ms  <<< ELEVATED
+t=[160,165)s  n= 859  max=  413.05ms  p95= 378.29ms  avg= 97.94ms  <<< ELEVATED
+t=[165,170)s  n= 825  max=  458.63ms  p95= 364.33ms  avg= 91.86ms  <<< ELEVATED
+t=[170,175)s  n= 856  max=  413.21ms  p95= 383.39ms  avg=101.68ms  <<< ELEVATED
+t=[175,180)s  n= 848  max=  459.73ms  p95= 391.74ms  avg= 93.05ms  <<< ELEVATED
+t=[180,185)s  n= 828  max=  409.68ms  p95= 378.19ms  avg= 93.34ms  <<< ELEVATED
+t=[185,190)s  n= 837  max=  444.50ms  p95= 402.23ms  avg= 96.25ms  <<< ELEVATED
+t=[190,195)s  n= 863  max=  442.44ms  p95= 371.27ms  avg= 95.99ms  <<< ELEVATED
+t=[195,200)s  n= 140  max=  420.93ms  p95= 417.37ms  avg=114.74ms  <<< ELEVATED
+
+=== Run B: identical config, Redis RDB autosave disabled (save "") (40236 requests) ===
+t=[  0,  5)s  n=  19  max=  270.50ms  p95= 270.50ms  avg=265.07ms  <<< ELEVATED
+t=[  5, 10)s  n=  19  max=  266.08ms  p95= 266.08ms  avg=264.09ms  <<< ELEVATED
+t=[ 10, 15)s  n=  19  max=  271.47ms  p95= 271.47ms  avg=265.67ms  <<< ELEVATED
+t=[ 15, 20)s  n= 921  max=  561.57ms  p95= 318.74ms  avg= 41.71ms  <<< ELEVATED
+t=[ 20, 25)s  n=1199  max=   33.15ms  p95=  13.84ms  avg=  7.40ms
+t=[ 25, 30)s  n=1197  max=  126.57ms  p95=  16.23ms  avg=  8.62ms
+t=[ 30, 35)s  n=1208  max=   20.99ms  p95=  10.68ms  avg=  6.86ms
+t=[ 35, 40)s  n=1199  max=   29.53ms  p95=  12.71ms  avg=  7.66ms
+t=[ 40, 45)s  n=1186  max=  113.28ms  p95=  20.04ms  avg=  9.82ms
+t=[ 45, 50)s  n=1202  max=   71.30ms  p95=  11.00ms  avg=  7.43ms
+t=[ 50, 55)s  n=1205  max=   46.25ms  p95=  10.91ms  avg=  7.01ms
+t=[ 55, 60)s  n=1194  max=   60.31ms  p95=  15.63ms  avg=  8.02ms
+t=[ 60, 65)s  n=1194  max=   45.93ms  p95=  23.26ms  avg=  9.20ms
+t=[ 65, 70)s  n=1193  max=   71.53ms  p95=  15.17ms  avg=  9.10ms
+t=[ 70, 75)s  n=1192  max=   41.67ms  p95=  14.89ms  avg=  8.39ms
+t=[ 75, 80)s  n=1202  max=   42.96ms  p95=  11.79ms  avg=  7.60ms
+t=[ 80, 85)s  n=1192  max=   64.46ms  p95=  14.87ms  avg=  8.34ms
+t=[ 85, 90)s  n=1204  max=   47.97ms  p95=  15.20ms  avg=  7.58ms
+t=[ 90, 95)s  n=1202  max=   16.81ms  p95=  10.40ms  avg=  6.98ms
+t=[ 95,100)s  n=1203  max=   55.72ms  p95=  13.12ms  avg=  7.86ms
+t=[100,105)s  n=1198  max=   20.80ms  p95=  11.27ms  avg=  7.33ms
+t=[105,110)s  n=1201  max=   29.32ms  p95=  13.36ms  avg=  7.72ms
+t=[110,115)s  n=1206  max=   13.33ms  p95=   9.71ms  avg=  6.56ms
+t=[115,120)s  n=1198  max=   79.66ms  p95=  17.78ms  avg=  8.21ms
+t=[120,125)s  n=1201  max=   17.52ms  p95=   9.89ms  avg=  6.77ms
+t=[125,130)s  n=1202  max=   25.84ms  p95=  13.36ms  avg=  7.76ms
+t=[130,135)s  n=1191  max=   70.96ms  p95=  21.11ms  avg=  9.02ms
+t=[135,140)s  n=1206  max=   23.53ms  p95=  10.46ms  avg=  6.61ms
+t=[140,145)s  n=1201  max=   28.58ms  p95=  12.67ms  avg=  7.42ms
+t=[145,150)s  n=1169  max=  242.99ms  p95=  15.96ms  avg= 11.21ms
+t=[150,155)s  n= 884  max=  388.63ms  p95= 353.78ms  avg= 75.75ms  <<< ELEVATED
+t=[155,160)s  n= 895  max=  407.29ms  p95= 352.50ms  avg= 79.95ms  <<< ELEVATED
+t=[160,165)s  n= 902  max=  391.22ms  p95= 352.94ms  avg= 80.67ms  <<< ELEVATED
+t=[165,170)s  n= 897  max=  442.11ms  p95= 363.45ms  avg= 81.58ms  <<< ELEVATED
+t=[170,175)s  n= 871  max=  424.02ms  p95= 362.28ms  avg= 78.80ms  <<< ELEVATED
+t=[175,180)s  n= 887  max=  391.29ms  p95= 371.13ms  avg= 88.05ms  <<< ELEVATED
+t=[180,185)s  n= 877  max=  388.72ms  p95= 358.17ms  avg= 75.42ms  <<< ELEVATED
+t=[185,190)s  n= 889  max=  405.58ms  p95= 372.88ms  avg= 87.24ms  <<< ELEVATED
+t=[190,195)s  n= 878  max=  419.68ms  p95= 365.93ms  avg= 79.62ms  <<< ELEVATED
+t=[195,200)s  n= 133  max=  416.19ms  p95= 395.19ms  avg=123.16ms  <<< ELEVATED
+
