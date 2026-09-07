@@ -28,9 +28,8 @@ from app.observability.metrics import render_latest
 from app.services.circuit_breaker import CircuitBreaker
 from app.services.embeddings import HashingEmbedder
 from app.services.generation import GenerationService
-from app.services.llm_clients import build_streaming_client
+from app.services.llm_clients import build_llm_client
 from app.services.rate_limiter import TokenBucketRateLimiter
-from app.services.semantic_cache import SemanticCache, StampedeLock
 
 logger = logging.getLogger("app.startup")
 
@@ -46,17 +45,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
 
     app.state.embedder = HashingEmbedder(dim=settings.embedding_dim)
-    app.state.semantic_cache = SemanticCache(
-        app.state.redis, settings.semantic_cache_similarity_threshold, settings.semantic_cache_ttl_seconds
-    )
-    app.state.stampede_lock = StampedeLock(app.state.redis, settings.cache_stampede_lock_ttl_seconds)
     app.state.rate_limiter = TokenBucketRateLimiter(
         app.state.redis, settings.rate_limit_burst, settings.rate_limit_requests_per_minute
     )
     app.state.circuit_breaker = CircuitBreaker(
         failure_threshold=settings.breaker_failure_threshold, open_seconds=settings.breaker_open_seconds
     )
-    primary_client = build_streaming_client(settings.llm_model, settings.llm_base_url)
+    primary_client = build_llm_client(settings.llm_model, settings.llm_base_url)
     app.state.generation_service = GenerationService(
         settings=settings,
         primary_client=primary_client,
@@ -90,7 +85,7 @@ _OPENAPI_TAGS = [
     {
         "name": "query",
         "description": "Retrieval-grounded Q&A: patient-scoped vector search, PHI redaction, "
-        "circuit-breaker-gated generation, sync and SSE.",
+        "circuit-breaker-gated generation.",
     },
     {
         "name": "ingest",
@@ -123,7 +118,8 @@ checks. Source: https://github.com/hariharan-sabapathi/clinical-evidence-api
 Generation runs in retrieval-only mode on the public instance (no LLM key
 on a free-tier host): `/query` returns `"answer": null, "degraded": true`
 alongside the same ranked, cited evidence a live model call would ground
-its answer in.
+its answer in. Every other layer still runs -- patient-scoped retrieval,
+PHI redaction before egress, the breaker.
 """
 
 

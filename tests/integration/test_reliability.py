@@ -34,7 +34,7 @@ async def test_forced_open_breaker_degrades_query_to_retrieval_only(app_instance
 
 async def test_retrieval_only_config_degrades_without_touching_the_breaker(app_instance, client, world):
     """No LLM_MODEL configured (the default test/public-instance config) --
-    the primary client is NullStreamingClient, whose canned refusal
+    the primary client is NullClient, whose canned refusal
     ``_grounding()`` would otherwise read as "grounded". Before this fix
     that produced a self-contradictory response: an answer body and
     ``degraded: false`` alongside ``served_by: retrieval_only``. This never

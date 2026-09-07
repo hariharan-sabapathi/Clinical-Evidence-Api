@@ -1,5 +1,13 @@
 # Performance: naive → profiled → fixed
 
+> **Superseded configuration note:** this benchmark was run against an
+> earlier version of the system, before semantic caching and SSE
+> streaming were removed from the service in a later simplification pass.
+> `SEMANTIC_CACHE_ENABLED` and the cache-stampede lock referenced below no
+> longer exist in the current codebase. The historical results and
+> analysis below are unchanged and still accurately describe what was
+> measured at the time.
+
 This follows the same loop as the NASSCOM Telegram-bot optimization
 story in the resume this repo supports — ship naive, load-test it,
 profile it to find out where time *actually* goes rather than where you

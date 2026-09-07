@@ -1,14 +1,11 @@
 """Orchestrates one /query call: PHI redaction -> prompt build -> circuit-
 breaker-gated model call with a retrieval-only floor on failure ->
-grounding check -> re-hydration. Shared by the sync and SSE endpoints so
-the fallback/breaker/redaction logic exists in exactly one place.
+grounding check -> re-hydration.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
-from collections.abc import AsyncGenerator
 import logging
 import re
 import time
@@ -20,7 +17,7 @@ from clinical_retrieval.generation.prompts import build_prompt
 from app.core.config import Settings
 from app.observability.metrics import llm_cost_usd_total, llm_tokens_total
 from app.services.circuit_breaker import CircuitBreaker
-from app.services.llm_clients import StreamingLLMClient
+from app.services.llm_clients import LLMClient
 from app.services.phi_redaction import PHIRedactor
 from app.services.retrieval import RetrievedChunk
 
@@ -81,7 +78,7 @@ class GenerationService:
     def __init__(
         self,
         settings: Settings,
-        primary_client: StreamingLLMClient,
+        primary_client: LLMClient,
         breaker: CircuitBreaker,
         redactor: PHIRedactor | None = None,
     ):
@@ -102,7 +99,7 @@ class GenerationService:
     async def answer(
         self, question: str, retrieved: list[RetrievedChunk], actor_id: str, known_names: list[str]
     ) -> AnswerResult:
-        # No LLM_MODEL configured -- self.primary_client is NullStreamingClient,
+        # No LLM_MODEL configured -- self.primary_client is NullClient,
         # which returns a canned refusal that _grounding() above would
         # otherwise read as "grounded", producing a self-contradictory
         # response (an answer body, degraded: false, served_by:
@@ -149,73 +146,6 @@ class GenerationService:
             logger.warning("llm_call_failed", extra={"task": "llm_call"}, exc_info=exc)
             self.breaker.on_failure()
             return self._degraded()
-
-    async def stream_answer(
-        self, question: str, retrieved: list[RetrievedChunk], actor_id: str, known_names: list[str]
-    ) -> AsyncGenerator[tuple[str, str | AnswerResult], None]:
-        """Async generator yielding ('token', str) chunks and finishing with
-        exactly one ('done', AnswerResult). The caller (the SSE route) is
-        responsible for polling ``request.is_disconnected()`` and closing
-        this generator early on disconnect -- ``aclose()`` raises
-        GeneratorExit here, which unwinds past the client's ``stream()``
-        call and lets it tear down its upstream connection (see
-        OpenAICompatibleStreamingClient.stream) instead of continuing to
-        pull tokens into a socket nobody is reading anymore."""
-        if self.primary_client.model_name == "retrieval-only":
-            yield ("done", self._degraded())
-            return
-        if not self.breaker.allow_request():
-            yield ("done", self._degraded())
-            return
-
-        prompt, scored_chunks, mapping = _build_retrieved_and_prompt(question, retrieved, self.redactor, known_names)
-        valid_ids = {sc.chunk.chunk_id for sc in scored_chunks}
-
-        accumulated = []
-        try:
-            # contextlib.aclosing, not a bare `async for`: a plain
-            # `async for piece in client.stream(...)` does NOT call
-            # `.aclose()` on that inner generator when *this* outer
-            # generator is itself closed (GeneratorExit lands on the
-            # `yield` below, not inside the inner iterator) -- so
-            # without this, closing `stream_answer` early would leave
-            # the upstream client's stream running unaware anyone
-            # stopped listening, which defeats the entire point of
-            # cancelling on client disconnect.
-            async with contextlib.aclosing(
-                self.primary_client.stream(prompt, self.settings.llm_max_tokens_per_request)
-            ) as upstream:
-                async with asyncio.timeout(self.settings.llm_call_timeout_seconds):
-                    async for piece in upstream:
-                        accumulated.append(piece)
-                        yield ("token", self.redactor.rehydrate(piece, mapping))
-            raw_text = "".join(accumulated)
-            self.breaker.on_success()
-            citations, grounded = self._grounding(raw_text, valid_ids)
-            tokens_prompt = _estimate_tokens(prompt)
-            tokens_completion = _estimate_tokens(raw_text)
-            self._record_usage(self.primary_client.model_name, tokens_prompt, tokens_completion)
-            yield (
-                "done",
-                AnswerResult(
-                    text=self.redactor.rehydrate(raw_text, mapping),
-                    citations=citations,
-                    grounded=grounded,
-                    degraded=False,
-                    served_by="primary",
-                    tokens_prompt=tokens_prompt,
-                    tokens_completion=tokens_completion,
-                    cost_usd=self._cost(tokens_prompt, tokens_completion),
-                ),
-            )
-            return
-        except GeneratorExit:
-            logger.info("stream_cancelled_by_client", extra={"task": "llm_call"})
-            raise
-        except (TimeoutError, Exception) as exc:  # noqa: BLE001
-            logger.warning("llm_stream_failed", extra={"task": "llm_call"}, exc_info=exc)
-            self.breaker.on_failure()
-            yield ("done", self._degraded())
 
     def _record_usage(self, model: str, tokens_prompt: int, tokens_completion: int) -> None:
         llm_tokens_total.labels(direction="prompt", model=model).inc(tokens_prompt)

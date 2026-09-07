@@ -103,21 +103,14 @@ sequenceDiagram
         R-->>C: 403 problem+json
     end
     R->>Redis: rate-limit check (Lua token bucket)
-    R->>Redis: semantic cache lookup (patient-scoped key)
-    alt cache hit
-        R-->>C: 200 (served_by: cache)
-    else cache miss
-        R->>Redis: stampede lock (SETNX)
-        R->>PG: SELECT ... ORDER BY embedding <=> :q LIMIT k  (RLS-enforced)
-        R->>R: PHI redaction, prompt build
-        R->>LLM: generate() [circuit-breaker gated, timeout]
-        LLM-->>R: answer text
-        R->>R: grounding check, re-hydrate PHI
-        R->>Redis: store cache entry, release lock
-        R->>PG: INSERT audit_events (same transaction)
-        R->>PG: COMMIT
-        R-->>C: 200 QueryResponse
-    end
+    R->>PG: SELECT ... ORDER BY embedding <=> :q LIMIT k  (RLS-enforced)
+    R->>R: PHI redaction, prompt build
+    R->>LLM: generate() [circuit-breaker gated, timeout]
+    LLM-->>R: answer text
+    R->>R: grounding check, re-hydrate PHI
+    R->>PG: INSERT audit_events (same transaction)
+    R->>PG: COMMIT
+    R-->>C: 200 QueryResponse
 ```
 
 The authorization check and the retrieval query are both scoped inside
@@ -132,12 +125,12 @@ actor's identity (and therefore RLS) is established.
 | **Pydantic v2** | Faster (Rust core) than v1, and its `model_config.json_schema_extra` is how every endpoint's OpenAPI example is attached without a second schema-authoring system. |
 | **Postgres 16 + pgvector** | One database for relational data (users, assignments, audit) *and* vector search (`documents.embedding`), rather than a relational store plus a separate vector database — one fewer moving part, one transaction spans both. pgvector's HNSW index (added in 0.5+) is what makes vector search at scale not a sequential scan; see `benchmarks/README.md`. |
 | **Alembic** | The de facto standard for SQLAlchemy migrations; `alembic upgrade head` / `downgrade -1` in CI is the whole reason to have it. |
-| **Redis** | Three distinct jobs, one dependency: the arq queue backend, the token-bucket rate limiter (atomic via a Lua script), and the semantic cache/stampede lock. Justifying a second in-memory store for any one of these wouldn't be worth it; one Redis instance doing all three is. |
+| **Redis** | Backs the arq queue and the token-bucket rate limiter (atomic via a Lua script) — two jobs, one dependency, rather than justifying a second in-memory store for either one alone. |
 | **arq** | See `docs/adr/0003-arq-over-celery.md`. |
 | **PyJWT + bcrypt** | Minimal, well-audited primitives for the two things auth actually needs (sign/verify a token, hash/verify a password) — no framework needed on top. |
 | **prometheus-client** | The metrics format every standard Grafana/Alertmanager setup expects; `/metrics` is a one-file integration. |
 | **httpx** | Async HTTP client used by the test suite (`AsyncClient` + `ASGITransport`) to drive the app in-process without a real socket. |
-| **pytest + pytest-asyncio + testcontainers + hypothesis** | Real Postgres/Redis per the spec ("no mocked database" — RLS bugs don't exist in a mock), async test support, and property-based testing for the one piece of code (`app/core/pagination.py`) where "works for every input, not just the examples I thought of" is the actual requirement. |
+| **pytest + pytest-asyncio + testcontainers** | Real Postgres/Redis per the spec ("no mocked database" — RLS bugs don't exist in a mock) and async test support. |
 | **ruff + mypy --strict** | One fast linter, one strict type checker; both run in CI and both pass — see the CI workflow. |
 | **k6** | Load-testing tool with a scripting model expressive enough for the auth-once-per-VU, realistic-query-mix pattern in `benchmarks/k6_query_load.js`, and JSON summary export for the before/after table. |
 
@@ -195,7 +188,7 @@ is the mechanism keeping the order honest.
 | Failure | What the client/user sees | How it recovers |
 |---|---|---|
 | Postgres unreachable | `/readyz` → 503; in-flight requests → 500 (problem+json) | `pool_pre_ping` detects dead connections; k8s/compose healthcheck restarts or stops routing traffic; no data loss (transactions either committed or rolled back cleanly) |
-| Redis unreachable | `/readyz` → 503; rate limiter / semantic cache calls raise, surfaced as 500 | Redis reconnects automatically via redis-py's connection pool; cache/rate-limit state is not authoritative data, safe to lose and rebuild |
+| Redis unreachable | `/readyz` → 503; rate limiter calls raise, surfaced as 500 | Redis reconnects automatically via redis-py's connection pool; rate-limit state is not authoritative data, safe to lose and rebuild |
 | LLM provider down/slow | Circuit breaker opens after 5 consecutive failures; `/query` degrades to 200 retrieval-only (`docs/adr/0004`) | Breaker half-opens after 30s cooldown, probes with the next request; closes again on success |
 | Worker crashes mid-job | `GET /v1/ingest/jobs/{id}` shows the job's last committed progress, never silently vanishes | arq retries (jittered backoff) up to `ingest_max_retries`; final failure lands in `dead` with a stored traceback (see `tests/integration/test_ingest_worker_crash_recovery.py`) |
 | Concurrent PATCH to the same document | One request gets 200, the other(s) get 409 | Client refetches the current ETag and retries — no data corruption, no lost update |

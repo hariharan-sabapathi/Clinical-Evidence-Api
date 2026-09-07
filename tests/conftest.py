@@ -138,8 +138,8 @@ async def migrated_db(postgres_url, migrator_url):
 @pytest_asyncio.fixture
 async def app_instance(migrated_db, redis_url, monkeypatch):
     """A fresh FastAPI app per test, wired to the shared test Postgres and a
-    dedicated Redis DB index (1) so semantic-cache/rate-limit/idempotency
-    state from one test never bleeds into the next."""
+    dedicated Redis DB index (1) so rate-limit/idempotency state from one
+    test never bleeds into the next."""
     from app.core.config import get_settings
 
     monkeypatch.setenv("REDIS_URL", _with_redis_db_index(redis_url, 1))

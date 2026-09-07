@@ -45,9 +45,6 @@ llm_cost_usd_total = Counter(
     registry=registry,
 )
 
-cache_hits_total = Counter("cache_hits_total", "Semantic cache hits", ["cache"], registry=registry)
-cache_misses_total = Counter("cache_misses_total", "Semantic cache misses", ["cache"], registry=registry)
-
 ingest_jobs_total = Counter(
     "ingest_jobs_total", "Ingest jobs reaching a terminal state", ["status"], registry=registry
 )

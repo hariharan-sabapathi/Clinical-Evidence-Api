@@ -21,8 +21,8 @@ on `sort_key` (two rows created in the same millisecond) are broken by
 `id`, which is unique, so the tuple is always a stable resume point
 regardless of what else is inserted or deleted elsewhere in the table.
 Malformed or tampered cursors decode to a controlled `InvalidCursorError`
-→ `422`, never a crash — proven for arbitrary input by the Hypothesis
-round-trip property test in `tests/property/test_cursor_codec.py`.
+→ `422`, never a crash — proven by the round-trip and malformed-input
+tests in `tests/unit/test_pagination_cursor.py`.
 
 ## Consequences
 

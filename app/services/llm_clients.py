@@ -1,48 +1,36 @@
-"""Streaming-capable LLM client wrappers, layered on top of the retrieval
-library's existing provider-agnostic ``LLMClient`` protocol
-(src/clinical_retrieval/generation/llm_client.py) rather than replacing it
--- the service adds a ``stream()`` method and reuses ``generate()`` as-is.
+"""LLM client wrappers, layered on top of the retrieval library's existing
+provider-agnostic ``LLMClient`` protocol
+(src/clinical_retrieval/generation/llm_client.py) rather than replacing it.
 """
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncGenerator
 from typing import Protocol
 
-from clinical_retrieval.generation.llm_client import LLMClient, NullLLMClient
+from clinical_retrieval.generation.llm_client import LLMClient as _InnerLLMClient
+from clinical_retrieval.generation.llm_client import NullLLMClient
 
 
-class StreamingLLMClient(Protocol):
+class LLMClient(Protocol):
     model_name: str
 
     def generate(self, prompt: str, max_tokens: int = 512) -> str: ...
 
-    def stream(self, prompt: str, max_tokens: int = 512) -> AsyncGenerator[str, None]: ...
 
-
-class NullStreamingClient:
+class NullClient:
     """Wraps NullLLMClient (used whenever no LLM_MODEL is configured) so the
-    SSE endpoint has something real to iterate in dev/CI without a live
-    model -- this is also what the disconnect-cancellation test exercises,
-    since it doesn't need network access to run."""
+    service has something real to call in dev/CI without a live model."""
 
     model_name = "retrieval-only"
 
     def __init__(self) -> None:
-        self._inner: LLMClient = NullLLMClient()
+        self._inner: _InnerLLMClient = NullLLMClient()
 
     def generate(self, prompt: str, max_tokens: int = 512) -> str:
         return self._inner.generate(prompt, max_tokens=max_tokens)
 
-    async def stream(self, prompt: str, max_tokens: int = 512) -> AsyncGenerator[str, None]:
-        text = self._inner.generate(prompt, max_tokens=max_tokens)
-        for word in text.split(" "):
-            yield word + " "
-            await asyncio.sleep(0)  # yield control so cancellation can interleave
 
-
-class OpenAICompatibleStreamingClient:
+class OpenAICompatibleClient:
     model_name: str
 
     def __init__(self, model: str, base_url: str | None = None, api_key_env: str = "LLM_API_KEY") -> None:
@@ -65,49 +53,11 @@ class OpenAICompatibleStreamingClient:
         )
         return response.choices[0].message.content or ""
 
-    async def stream(self, prompt: str, max_tokens: int = 512) -> AsyncGenerator[str, None]:
-        # The OpenAI SDK's streaming response is a sync context manager;
-        # run it in a worker thread and hand deltas back through a queue so
-        # this stays a proper async generator the SSE endpoint can cancel.
-        loop = asyncio.get_event_loop()
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
 
-        def _produce() -> None:
-            try:
-                stream = self._client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=max_tokens,
-                    temperature=0.0,
-                    stream=True,
-                )
-                for chunk in stream:
-                    delta = chunk.choices[0].delta.content or ""
-                    if delta:
-                        loop.call_soon_threadsafe(queue.put_nowait, delta)
-            finally:
-                loop.call_soon_threadsafe(queue.put_nowait, None)
-
-        task = loop.run_in_executor(None, _produce)
-        try:
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                yield item
-        finally:
-            # Best-effort: the executor thread already has an open HTTP
-            # stream from the SDK; cancelling the asyncio task here stops
-            # this generator from being iterated further so the SSE
-            # endpoint stops burning cycles on a client that's gone, even
-            # though the underlying thread finishes independently.
-            task.cancel()
-
-
-def build_streaming_client(model: str, base_url: str | None) -> StreamingLLMClient:
+def build_llm_client(model: str, base_url: str | None) -> LLMClient:
     if model == "not-configured":
-        return NullStreamingClient()
+        return NullClient()
     try:
-        return OpenAICompatibleStreamingClient(model, base_url=base_url)
+        return OpenAICompatibleClient(model, base_url=base_url)
     except RuntimeError:
-        return NullStreamingClient()
+        return NullClient()

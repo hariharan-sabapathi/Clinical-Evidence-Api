@@ -2,13 +2,11 @@
 
 [![CI](https://github.com/hariharan-sabapathi/clinical-evidence-api/actions/workflows/ci.yml/badge.svg)](https://github.com/hariharan-sabapathi/clinical-evidence-api/actions/workflows/ci.yml)
 
-A production-shaped HTTP service for retrieval-grounded question answering
-over a clinical FHIR corpus — per-clinician authorization enforced by
-Postgres Row-Level Security, append-only audit logging, async FHIR bundle
-ingestion, and an LLM serving layer built for the failure modes that
-actually show up in production (streaming, semantic caching, PHI
-redaction, circuit breaking). Built for clinicians and the engineers
-who have to keep this kind of system honest under audit.
+A secure backend API for retrieving patient-specific clinical evidence and
+optionally generating an LLM-based answer from that evidence. A clinician
+can only ever retrieve data for patients they're authorized to access,
+every clinical-data access is audit-logged, and clinical text is redacted
+before it's sent to an external LLM.
 
 **Live:** https://clinical-evidence-api.onrender.com/docs
 
@@ -39,39 +37,58 @@ patient's id.
 > configured on a free-tier host, so `/query` returns ranked, cited
 > evidence with `"answer": null, "degraded": true`. That's the identical
 > path the circuit breaker takes when a model is unavailable. Every other
-> layer runs — patient-scoped retrieval, PHI redaction before egress, the
-> semantic cache, SSE streaming, the breaker. Set `LLM_MODEL` and
-> `LLM_API_KEY` to enable generation locally.
+> layer still runs — patient-scoped retrieval, PHI redaction before
+> egress, the breaker. Set `LLM_MODEL` and `LLM_API_KEY` to enable
+> generation locally.
 
-## What this demonstrates
+## What this project covers
 
-- **API contract design** — `/v1` prefix, cursor pagination, RFC 7807
-  error bodies, idempotent ingestion via `Idempotency-Key`.
-- **Authorization** — Postgres Row-Level Security plus an explicit
-  application-level check, defense in depth (§ below).
-- **Data modeling & SQL** — a normalized schema, zero-downtime migrations,
-  pgvector with an HNSW index for vector search.
-- **Concurrency** — optimistic locking on document updates (`If-Match` /
-  ETag, 409 on conflict), a cache-stampede lock around the semantic cache.
-- **Async work** — an arq queue, retries with jittered backoff, dead
-  letters, job status polling.
-- **Reliability** — timeouts, a circuit breaker with a retrieval-only
-  floor, a Redis-backed token-bucket rate limiter.
-- **Observability** — structured JSON logs and Prometheus metrics.
-- **Testing & CI** — 140+ tests including a dedicated `tests/security/`
-  suite, `mypy --strict`, `ruff`, all run on every push.
+1. **Authentication and authorization** — JWT login, roles (clinician,
+   auditor, admin), and an explicit per-patient assignment check.
+2. **PostgreSQL + Row-Level Security** — the database itself, not just
+   application code, enforces that a clinician can only read their
+   assigned patients' data.
+3. **Patient-scoped vector retrieval** — pgvector similarity search over
+   clinical text, scoped to one patient inside the SQL query itself.
+4. **FHIR ingestion** — admin uploads a FHIR bundle; it's parsed, chunked,
+   embedded, and stored.
+5. **Background worker** — ingestion runs asynchronously on a queue, with
+   retries and job-status polling.
+6. **Redis** — backs the rate limiter (and the ingestion queue).
+7. **PHI redaction** — clinical text is redacted before it's sent to the LLM.
+8. **LLM integration** — an interface with a null/mock implementation and
+   a real provider implementation, so the API works with or without a key.
+9. **Audit logging** — every clinical-data access writes an audit row, in
+   the same transaction as the read.
+10. **Idempotency** — retrying an ingestion request with the same key does
+    not create duplicate work.
+11. **Optimistic locking / ETags** — concurrent document updates are
+    rejected with 409, not silently overwritten.
+12. **Prometheus metrics** — request counts, latency, and errors.
+13. **Testing and CI** — 130+ automated tests (including a dedicated
+    `tests/security/` suite), `mypy --strict`, `ruff`, all run on every push.
+14. **Deployment** — Docker Compose locally, auto-deployed from `main` in
+    production.
+
+The AI/LLM piece matters, but this is primarily a backend engineering
+project: the interesting parts are the authorization model, the data
+layer, the async worker, and how the service degrades gracefully when the
+LLM isn't available — not the LLM call itself.
 
 ## Performance: before / after
 
 Same k6 script (`benchmarks/k6_query_load.js`), same parameters (50 VUs,
 3 minutes, a 5-question realistic mix against 60 seeded patients / 18,000
 chunks) run three times, changing one thing at a time. The honest result:
-the fix that was planned (semantic cache + an HNSW index) barely moved
-the number; profiling with `py-spy` found the real bottleneck was
+the fix that was planned (an added cache layer + an HNSW index) barely
+moved the number; profiling with `py-spy` found the real bottleneck was
 something else entirely. Full writeup — including a Little's Law
 saturation analysis and a tail-latency investigation that didn't fully
 resolve, reported as such — is in
-[`benchmarks/README.md`](benchmarks/README.md).
+[`benchmarks/README.md`](benchmarks/README.md). **Note:** that benchmark
+was run against an earlier version of this system, before semantic
+caching and SSE streaming were removed for simplicity — see the note at
+the top of that document.
 
 | Metric | v0.1-naive (1 worker, no cache/index) | +cache +HNSW (1 worker) | +cache +HNSW +4 workers † |
 |---|---:|---:|---:|
@@ -157,9 +174,7 @@ before enqueue; see Known limitations.
 See `docs/adr/0001-postgres-rls-over-application-authz.md` for the full
 reasoning, and `docs/adr/0005-audit-write-in-read-transaction.md` for why
 every read also writes an audit row in the same transaction (auditability
-over availability, deliberately) — including a semantic-cache hit, which
-still delivers clinical information and audits identically to a
-freshly-computed answer.
+over availability, deliberately).
 
 ## Security tests
 
@@ -170,13 +185,7 @@ states its own claim.
   clinician assigned to patient A can never read patient B's documents,
   record, or query answers, and the 403 body leaks nothing (`patient_id`
   never appears, not even in the error's `instance` field — routes are
-  templated, not resolved-path, in every RFC 7807 response).
-- `test_semantic_cache_patient_isolation.py` — proves the semantic cache
-  cannot become an authorization bypass: cache keys are partitioned by
-  patient at the Redis key level, so a clinician scoped to patient B can
-  never retrieve an answer computed from patient A's chart. (The default
-  embedder behind that cache is deterministic feature hashing, not a
-  learned model — see the note below.)
+  templated, not resolved-path, in every error response).
 - `test_phi_egress.py` — proves no HIPAA Safe Harbor identifier (name,
   precise date, MRN, phone, email, SSN, street address) appears in the
   text actually sent to the LLM, captured via a scripted client double.
@@ -190,13 +199,12 @@ states its own claim.
   scoped in-query (see "Authorization model" above), not by
   post-filtering results.
 - `test_query_audit.py` — proves `/query` writes exactly one audit row
-  per call, and a semantic-cache hit writes its own row rather than
-  skipping the audit entirely.
+  per call.
 
-Also: `tests/concurrency/` (the optimistic-lock race, the cache
-stampede), `tests/property/` (Hypothesis on the cursor codec),
-`tests/contract/` (every non-2xx response is one RFC 7807 shape;
-`/openapi.json` has an example on every endpoint), and
+Also: `tests/concurrency/` (the optimistic-lock race),
+`tests/unit/` (pagination cursor codec, circuit breaker),
+`tests/contract/` (every non-2xx response is one consistent JSON error
+shape; `/openapi.json` has an example on every endpoint), and
 `tests/integration/` (real Postgres + Redis, worker crash recovery, rate
 limiting, breaker degradation, retrieval-only config).
 
@@ -207,11 +215,11 @@ maps to a chunk.
 
 **On the default embedder:** `HashingEmbedder` is deterministic feature
 hashing, not a learned model. It produces real vectors with real cosine
-structure, so every code path — HNSW index, similarity threshold, cache
-lookup — is the production path. But it captures lexical overlap, not
-learned semantics: "heart attack" and "myocardial infarction" would not
-match. `OpenAIEmbeddingClient` is implemented and is a one-line swap in
-startup wiring; see `docs/adr/0006-deterministic-hashing-embedder-default.md`.
+structure, so every code path — the HNSW index, the vector search itself
+— is the production path. But it captures lexical overlap, not learned
+semantic understanding: "heart attack" and "myocardial infarction" would
+not match. `OpenAIEmbeddingClient` is implemented and is a one-line swap
+in startup wiring; see `docs/adr/0006-deterministic-hashing-embedder-default.md`.
 
 ## Run locally
 
@@ -242,11 +250,11 @@ would normally use. Every piece of this system was still built and
 verified end-to-end: Postgres 16 + pgvector and Redis installed directly
 via `apt`, k6 built from source via `go install go.k6.io/k6@latest`
 (the Go module proxy *is* reachable), and the full request lifecycle —
-auth, RLS-scoped reads, async ingestion with a real arq worker, SSE
-streaming, the circuit breaker, the rate limiter, all three k6 runs — exercised
-against those directly. `docker-compose.yml`/`Dockerfile` describe exactly
-that same setup for an environment with normal registry access; nothing
-in them is unverified guesswork. With `LLM_MODEL`/`LLM_API_KEY` set,
+auth, RLS-scoped reads, async ingestion with a real arq worker, the
+circuit breaker, the rate limiter, all three k6 runs — exercised against
+those directly. `docker-compose.yml`/`Dockerfile` describe exactly that
+same setup for an environment with normal registry access; nothing in
+them is unverified guesswork. With `LLM_MODEL`/`LLM_API_KEY` set,
 `/query` calls a real model; without one, it runs in the same
 retrieval-only mode the CLI's `NullLLMClient` always has.
 
@@ -269,12 +277,7 @@ curl -s -X POST $BASE/v1/patients/$PATIENT_ID/query \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"q": "what medication is prescribed for diabetes?"}' | jq
 
-# 4. Stream the same question token-by-token (SSE)
-curl -N -X POST $BASE/v1/patients/$PATIENT_ID/query/stream \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"q": "what medication is prescribed for diabetes?"}'
-
-# 5. Ingest a FHIR bundle asynchronously (admin only, idempotent)
+# 4. Ingest a FHIR bundle asynchronously (admin only, idempotent)
 ADMIN_TOKEN=$(curl -s -X POST $BASE/v1/auth/token \
   -d "username=admin@example.org&password=admin-pass" \
   -H "Content-Type: application/x-www-form-urlencoded" | jq -r .access_token)
@@ -294,8 +297,6 @@ One line each — the prepared answer to "what would you improve?":
   concurrency that should be split so the DB connection is released first
 - Idempotency reservation is check-then-insert, not atomic — concurrent
   identical requests can both enqueue
-- The stampede lock releases without an ownership token, so a slow holder
-  can delete a successor's lock
 - RLS covers `documents`; `patients` relies on application-level scoping
 - Refresh-token rotation has no concurrency guard
 - Circuit breaker state is per-process and doesn't share across replicas
@@ -308,14 +309,12 @@ Honest answer, not a marketing one:
 - **This benchmark's own corpus (18,000 chunks) wasn't large enough to
   make the vector index the bottleneck** — see "Performance" above: at
   300 chunks/patient the sequential scan was already low-single-digit
-  milliseconds, which is exactly why the cache+index run barely moved the
-  number. At 100x the per-patient chunk count, that stops being true and
-  the HNSW index becomes load-bearing; the semantic cache's hit rate would
-  also fall as a real, diversifying query mix replaces this benchmark's
-  5-question repeat pattern, pushing more load back onto retrieval +
-  generation. The circuit breaker's retrieval-only floor exists precisely
-  so generation capacity, not correctness, degrades gracefully first once
-  that happens.
+  milliseconds, which is exactly why the earlier cache+index experiment
+  barely moved the number. At 100x the per-patient chunk count, that stops
+  being true and the HNSW index becomes load-bearing, pushing more load
+  onto retrieval + generation. The circuit breaker's retrieval-only floor
+  exists precisely so generation capacity, not correctness, degrades
+  gracefully first once that happens.
 - **A single Postgres primary** becomes the ceiling before anything else
   does — every RLS-scoped read and every audit write goes through it.
   Read replicas would need RLS's session variable propagated per-
@@ -340,16 +339,50 @@ Honest answer, not a marketing one:
 
 ## Architecture / ADRs
 
-```mermaid
-flowchart LR
-    Client -->|JWT| API[FastAPI service]
-    API -->|SET LOCAL app.actor_id| PG[(Postgres 16 + pgvector\nRow-Level Security)]
-    API -->|rate limit, semantic cache,\nstampede lock, idempotency| Redis[(Redis)]
-    API -->|enqueue| Queue[[arq queue]]
-    Worker[arq worker] --> Queue
-    Worker -->|service role, bypasses\nper-clinician scoping| PG
-    API -->|circuit-breaker gated| LLM[LLM / NullClient]
-    API -->|/metrics| Prom[Prometheus]
+**Main query flow:**
+
+```text
+Client
+  ↓
+FastAPI
+  ↓
+Authentication / Authorization
+  ↓
+PostgreSQL + RLS + pgvector
+  ↓
+Patient-scoped Retrieval
+  ↓
+Relevant Evidence
+  ↓
+PHI Redaction
+  ↓
+LLM
+  ↓
+JSON Answer + Evidence
+```
+
+**Ingestion flow:**
+
+```text
+Admin
+  ↓
+FHIR Upload
+  ↓
+Queue
+  ↓
+Background Worker
+  ↓
+Parse / Chunk / Embed
+  ↓
+PostgreSQL
+```
+
+**Supporting components:**
+
+```text
+Redis        → Rate Limiting
+Prometheus   → API Metrics
+Audit        → Clinical-data Access Records
 ```
 
 Request lifecycle, ERD, dependency rationale, the zero-downtime migration
@@ -362,7 +395,7 @@ tradeoffs are in [`docs/adr/`](docs/adr/).
 ```
 app/                  the service (this document's subject)
   api/v1/             route handlers
-  services/           auth, retrieval, generation, caching, reliability
+  services/           auth, retrieval, generation, reliability
   models/, schemas/   SQLAlchemy models / Pydantic schemas
   workers/            arq worker + settings
   observability/      logging, metrics
@@ -370,7 +403,7 @@ alembic/versions/     migrations, including the RLS policy and the
                       three-step zero-downtime pattern (0004-0006)
 tests/
   security/           start here
-  concurrency/ property/ contract/ integration/
+  concurrency/ unit/ contract/ integration/
 benchmarks/           k6 script + before/after results
 docs/adr/             architecture decision records
 src/clinical_retrieval/   the retrieval library this service wraps

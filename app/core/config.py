@@ -65,12 +65,6 @@ class Settings(BaseSettings):
     # --- Retrieval / RAG ---
     embedding_dim: int = 256
     retrieval_top_k: int = 5
-    semantic_cache_similarity_threshold: float = 0.95
-    semantic_cache_ttl_seconds: int = 6 * 60 * 60
-    # Off switch used only to reproduce the "naive" v0.1 benchmark baseline
-    # in benchmarks/ -- see benchmarks/README.md. Always on in real use.
-    semantic_cache_enabled: bool = Field(default=True, alias="SEMANTIC_CACHE_ENABLED")
-    cache_stampede_lock_ttl_seconds: int = 30
 
     # --- LLM serving ---
     llm_model: str = Field(default="not-configured", alias="LLM_MODEL")

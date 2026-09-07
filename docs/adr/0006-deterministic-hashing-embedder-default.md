@@ -2,8 +2,8 @@
 
 ## Context
 
-Every vector-search code path (`app/services/retrieval.py`, the semantic
-cache, the ingestion worker) needs an `Embedder`. A real embedding model
+Every vector-search code path (`app/services/retrieval.py`, the ingestion
+worker) needs an `Embedder`. A real embedding model
 (OpenAI's API, or a local sentence-transformers model) is the production
 answer, but this project's sandbox has no configured LLM/embeddings API
 key and unreliable access to model-weight downloads (see the retrieval
@@ -19,10 +19,10 @@ deterministic, offline, feature-hashing vector — tokens hashed into fixed
 dimensions with a sign bit, L2-normalized. It's not state-of-the-art
 semantic similarity, but it is a real vector with real cosine-similarity
 structure (similar text hashes to similar vectors), so pgvector's HNSW
-index, the cosine-distance query in `retrieve()`, and the semantic
-cache's similarity threshold all exercise the actual code path a
-production embedding model would run through — nothing about the
-service's architecture is mocked or stubbed for this. Both the embedder
+index and the cosine-distance query in `retrieve()` both exercise the
+actual code path a production embedding model would run through —
+nothing about the service's architecture is mocked or stubbed for this.
+Both the embedder
 and the LLM client sit behind the same kind of narrow protocol the
 retrieval library already established for its own `LLMClient`
 (`NullLLMClient` vs. `OpenAICompatibleClient`), so swapping in
