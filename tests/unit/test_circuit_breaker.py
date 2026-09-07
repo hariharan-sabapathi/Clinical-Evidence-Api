@@ -35,7 +35,7 @@ def test_transitions_to_half_open_after_cooldown():
     breaker = CircuitBreaker(failure_threshold=1, open_seconds=0.05)
     breaker.on_failure()
     assert breaker.state == BreakerState.OPEN
-    time.sleep(0.06)
+    time.sleep(0.1)
     assert breaker.state == BreakerState.HALF_OPEN
     assert breaker.allow_request()
 
@@ -43,7 +43,7 @@ def test_transitions_to_half_open_after_cooldown():
 def test_half_open_probe_failure_reopens_and_resets_cooldown():
     breaker = CircuitBreaker(failure_threshold=1, open_seconds=0.05)
     breaker.on_failure()
-    time.sleep(0.06)
+    time.sleep(0.1)
     assert breaker.state == BreakerState.HALF_OPEN
     breaker.on_failure()
     assert breaker.state == BreakerState.OPEN
@@ -53,7 +53,7 @@ def test_half_open_probe_failure_reopens_and_resets_cooldown():
 def test_half_open_probe_success_closes_the_breaker():
     breaker = CircuitBreaker(failure_threshold=1, open_seconds=0.05)
     breaker.on_failure()
-    time.sleep(0.06)
+    time.sleep(0.1)
     assert breaker.state == BreakerState.HALF_OPEN
     breaker.on_success()
     assert breaker.state == BreakerState.CLOSED

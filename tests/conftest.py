@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import uuid
 from datetime import date
 
@@ -39,9 +40,11 @@ _RUNTIME_PASSWORD = "runtimepassword"
 
 
 def _to_asyncpg_url(url: str) -> str:
-    if url.startswith("postgresql+asyncpg://"):
-        return url
-    return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    # testcontainers' get_connection_url() has, across versions, returned
+    # both a bare "postgresql://" and a driver-qualified
+    # "postgresql+psycopg2://" -- normalize either (or any other +driver)
+    # to +asyncpg so create_async_engine always gets an async-capable URL.
+    return re.sub(r"^postgresql(\+\w+)?://", "postgresql+asyncpg://", url, count=1)
 
 
 def _with_redis_db_index(url: str, index: int) -> str:
@@ -67,7 +70,24 @@ async def _bootstrap_roles_and_extension(superuser_url: str) -> None:
         ):
             exists = await conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": role})
             if exists.scalar_one_or_none() is None:
-                await conn.execute(text(f"CREATE ROLE {role} LOGIN PASSWORD :pw {extra}"), {"pw": password})
+                # CREATE ROLE's PASSWORD clause is a string literal in
+                # Postgres's own grammar, not a bind-parameter position --
+                # asyncpg always uses the server-side extended query
+                # protocol, so a $1 placeholder there is a syntax error
+                # (psycopg2 never hit this because it substitutes
+                # parameters client-side before sending plain SQL text).
+                # role/password here are always one of the two hardcoded
+                # module-level constants above, never external input.
+                quoted_password = password.replace("'", "''")
+                await conn.execute(text(f"CREATE ROLE {role} LOGIN PASSWORD '{quoted_password}' {extra}"))
+
+        # PostgreSQL 15+ no longer grants CREATE on the public schema to
+        # every role by default. The migrator owns the application tables,
+        # so it needs schema CREATE/USAGE before Alembic can create its
+        # version table and the initial schema. The runtime role deliberately
+        # gets only USAGE; it must never be able to create schema objects.
+        await conn.execute(text("GRANT USAGE, CREATE ON SCHEMA public TO clinical_app"))
+        await conn.execute(text("GRANT USAGE ON SCHEMA public TO clinical_runtime"))
     await engine.dispose()
 
 
