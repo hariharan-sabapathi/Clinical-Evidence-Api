@@ -64,7 +64,7 @@ class OpenAIEmbeddingClient:
 
     def embed(self, text: str) -> list[float]:
         response = self._client.embeddings.create(model=self.model, input=text)
-        return response.data[0].embedding
+        return [float(value) for value in response.data[0].embedding]
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
