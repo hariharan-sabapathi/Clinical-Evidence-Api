@@ -1,348 +1,558 @@
-# clinical-evidence-api
+# Clinical Evidence API
 
 [![CI](https://github.com/hariharan-sabapathi/clinical-evidence-api/actions/workflows/ci.yml/badge.svg)](https://github.com/hariharan-sabapathi/clinical-evidence-api/actions/workflows/ci.yml)
 
-A secure backend API for retrieving patient-specific clinical evidence and
-optionally generating an LLM-based answer from that evidence. A clinician
-can only ever retrieve data for patients they're authorized to access,
-every clinical-data access is audit-logged, and clinical text is redacted
-before it's sent to an external LLM.
+A backend API for retrieving patient-specific clinical evidence and optionally generating an LLM-based answer from that evidence.
 
-**Live:** https://clinical-evidence-api.onrender.com/docs
+The system is designed around **authorization, database-level isolation, patient-scoped retrieval, asynchronous ingestion, reliability, auditability, and graceful degradation**.
 
-**Demo credentials** (email / password):
+A clinician can only access patients they are assigned to. Clinical-data access is audit-logged, and clinical text is redacted before it is sent to an external LLM.
 
-```
-clinician.a@example.org / clinician-a-pass   (assigned to Patient A)
-clinician.b@example.org / clinician-b-pass   (assigned to Patient B)
-auditor@example.org     / auditor-pass       (audit log only)
-admin@example.org       / admin-pass         (ingestion only, no patient data access)
-```
+**Live API:** https://clinical-evidence-api.onrender.com/docs
+
+---
 
 ## See the authorization model in 60 seconds
 
-1. `POST /v1/auth/token` as clinician A, then **Authorize** in `/docs` with the token
-2. `GET /v1/patients` → Patient A only
-3. `POST /v1/patients/{patient_a_id}/query` → cited evidence
-4. `GET /v1/patients/{patient_b_id}/documents` → 403, body leaks nothing
+The fastest way to understand the security model is through the running API:
 
-Step 4 is the whole project in one call: a clinician assigned to Patient A
-gets a 403 — not a silent empty result, not a 500 — the moment they reach
-for another clinician's patient, and the error body doesn't even leak that
-patient's id.
+1. `POST /v1/auth/token` as clinician A and authorize in `/docs`
+2. `GET /v1/patients` → returns only Patient A
+3. `POST /v1/patients/{patient_a_id}/query` → returns patient-scoped evidence
+4. `GET /v1/patients/{patient_b_id}/documents` → returns `403`
 
-## About the public instance
+The important part is that the last request does **not** silently return an empty result or expose Patient B's data. The API explicitly rejects access to a patient outside the clinician's assignment.
 
-> The public instance runs in retrieval-only mode: no LLM key is
-> configured on a free-tier host, so `/query` returns ranked, cited
-> evidence with `"answer": null, "degraded": true`. That's the identical
-> path the circuit breaker takes when a model is unavailable. Every other
-> layer still runs — patient-scoped retrieval, PHI redaction before
-> egress, the breaker. Set `LLM_MODEL` and `LLM_API_KEY` to enable
-> generation locally.
+---
 
-## What this project covers
+## Public instance
 
-1. **Authentication and authorization** — JWT login, roles (clinician,
-   auditor, admin), and an explicit per-patient assignment check.
-2. **PostgreSQL + Row-Level Security** — the database itself, not just
-   application code, enforces that a clinician can only read their
-   assigned patients' data.
-3. **Patient-scoped vector retrieval** — pgvector similarity search over
-   clinical text, scoped to one patient inside the SQL query itself.
-4. **FHIR ingestion** — admin uploads a FHIR bundle; it's parsed, chunked,
-   embedded, and stored.
-5. **Background worker** — ingestion runs asynchronously on a queue, with
-   retries and job-status polling.
-6. **Redis** — backs the rate limiter (and the ingestion queue).
-7. **PHI redaction** — clinical text is redacted before it's sent to the LLM.
-8. **LLM integration** — an interface with a null/mock implementation and
-   a real provider implementation, so the API works with or without a key.
-9. **Audit logging** — every clinical-data access writes an audit row, in
-   the same transaction as the read.
-10. **Idempotency** — retrying an ingestion request with the same key does
-    not create duplicate work.
-11. **Optimistic locking / ETags** — concurrent document updates are
-    rejected with 409, not silently overwritten.
-12. **Prometheus metrics** — request counts, latency, and errors.
-13. **Testing and CI** — 130+ automated tests (including a dedicated
-    `tests/security/` suite), `mypy --strict`, `ruff`, all run on every push.
-14. **Deployment** — Docker Compose locally, auto-deployed from `main` in
-    production.
+The public deployment runs in **retrieval-only mode** because no LLM API key is configured on the deployment.
 
-The AI/LLM piece matters, but this is primarily a backend engineering
-project: the interesting parts are the authorization model, the data
-layer, the async worker, and how the service degrades gracefully when the
-LLM isn't available — not the LLM call itself.
+For `/query`, this means the service returns ranked, cited evidence with:
 
-## Performance: before / after
+```json
+{
+  "answer": null,
+  "degraded": true
+}
+```
 
-Same k6 script (`benchmarks/k6_query_load.js`), same parameters (50 VUs,
-3 minutes, a 5-question realistic mix against 60 seeded patients / 18,000
-chunks) run three times, changing one thing at a time. The honest result:
-the fix that was planned (an added cache layer + an HNSW index) barely
-moved the number; profiling with `py-spy` found the real bottleneck was
-something else entirely. Full writeup — including a Little's Law
-saturation analysis and a tail-latency investigation that didn't fully
-resolve, reported as such — is in
-[`benchmarks/README.md`](benchmarks/README.md). **Note:** that benchmark
-was run against an earlier version of this system, before semantic
-caching and SSE streaming were removed for simplicity — see the note at
-the top of that document.
+This is the same degraded path used when the LLM is unavailable.
 
-| Metric | v0.1-naive (1 worker, no cache/index) | +cache +HNSW (1 worker) | +cache +HNSW +4 workers † |
-|---|---:|---:|---:|
-| avg latency | 270.79 ms | 290.30 ms | 8.57 ms |
-| p95 latency | 484.34 ms | 457.47 ms | 12.47 ms |
-| throughput | 97.6 req/s | 93.7 req/s | **220.1 req/s** |
-| requests in flight (Little's Law, L = throughput × latency) | ≈26 | ≈27 | ≈1.9 |
+The rest of the request pipeline still runs:
 
-The cache referenced in this benchmark was later removed from the
-service; see `benchmarks/README.md` for the note on configuration drift.
+```text
+Authentication
+    ↓
+Patient authorization
+    ↓
+Patient-scoped retrieval
+    ↓
+Evidence
+    ↓
+PHI redaction
+    ↓
+LLM generation (when configured)
+```
 
-† **This column is one run, not a settled number.** Two later re-runs of
-the identical config, done to investigate its `max=639ms` tail, both show
-a sustained elevated-latency period this run didn't — the honest range is
-closer to avg 8–95ms / p95 12–380ms pending an unresolved root cause; see
-[`benchmarks/README.md`](benchmarks/README.md#before--after). The 2.3×
-throughput figure is also a floor, not a measured ceiling — the run never
-saturated the server, so true capacity is unknown and higher.
+To enable generation locally, configure `LLM_MODEL` and `LLM_API_KEY`.
 
-**Read the latency drop as a saturation artifact, not a speed claim.**
-~26 requests in flight under 50 offered VUs means the single-process runs
-were saturated — most of that 270–290ms was queueing for one process's
-attention, not work. The 4-worker run holds under 2 requests in flight:
-unsaturated, latency close to pure service time. That's why throughput
-(2.3× — see the footnote for why even that's a floor), not the ~30×
-latency gap, is the number that describes this change. Full analysis
-(why 2.3× and not 4×, the tail-latency investigation, what the flame
-graph found) is in [`benchmarks/README.md`](benchmarks/README.md).
+---
 
-## Authorization model
+## Demo credentials
 
-**Clinicians can read only patients they're assigned to, via
-`care_assignments`.** Enforcement is Postgres Row-Level Security, not an
-`if` statement in a route handler:
+These credentials are for the seeded demo environment:
+
+```text
+clinician.a@example.org / clinician-a-pass   (assigned to Patient A)
+clinician.b@example.org / clinician-b-pass   (assigned to Patient B)
+auditor@example.org     / auditor-pass       (audit log access)
+admin@example.org       / admin-pass         (ingestion)
+```
+
+---
+
+## What the project covers
+
+1. **Authentication and authorization**  
+   JWT authentication, role-based access, and explicit per-patient assignment checks.
+
+2. **PostgreSQL + Row-Level Security**  
+   PostgreSQL enforces patient-data isolation at the database layer rather than relying only on application code.
+
+3. **Patient-scoped vector retrieval**  
+   pgvector similarity search is scoped to the requested patient directly in the SQL query.
+
+4. **FHIR ingestion**  
+   Admin users can submit FHIR bundles which are parsed, chunked, embedded, and stored.
+
+5. **Asynchronous background processing**  
+   Ingestion is handled by an arq worker with retries and job-status polling.
+
+6. **Redis-backed reliability**  
+   Redis is used for rate limiting and the ingestion queue.
+
+7. **PHI redaction**  
+   Clinical text is redacted before being sent to an external LLM.
+
+8. **LLM integration**  
+   The generation layer uses an interface so the service can run with a null/mock implementation or a real provider.
+
+9. **Graceful LLM degradation**  
+   If generation is unavailable, the API falls back to retrieval-only evidence rather than failing the entire request.
+
+10. **Audit logging**  
+    Clinical-data access creates an audit record in the same transaction as the read.
+
+11. **Idempotency**  
+    Ingestion requests support idempotency keys to prevent duplicate work during retries.
+
+12. **Optimistic locking / ETags**  
+    Concurrent document updates are rejected with `409` instead of silently overwriting another update.
+
+13. **Prometheus metrics**  
+    The service exposes request, latency, and error metrics.
+
+14. **Testing and CI**  
+    The project has **140 automated tests**, including dedicated security, concurrency, contract, integration, and unit tests. CI runs the test suite together with type checking and linting.
+
+15. **Dockerized deployment**  
+    The complete service can be run locally with Docker Compose and the `main` branch is used for deployment.
+
+---
+
+## Why this is an AI/backend project
+
+The LLM call is only one component of the system.
+
+The more important engineering problems are:
+
+- How do you prevent one clinician from retrieving another patient's data?
+- What happens if the LLM is unavailable?
+- How do you keep ingestion asynchronous?
+- How do you make retries safe?
+- How do you audit clinical-data access?
+- How do you prevent concurrent document updates from overwriting each other?
+- How do you scope vector retrieval before results are returned?
+- How does the system behave as load increases?
+
+The project therefore focuses primarily on **backend engineering with an AI-assisted retrieval/generation layer**, rather than treating the LLM API call itself as the main feature.
+
+---
+
+# Authorization model
+
+Clinicians can read only patients assigned to them through `care_assignments`.
+
+The database enforces this using PostgreSQL Row-Level Security:
 
 ```sql
 CREATE POLICY documents_select_scoped ON documents
   FOR SELECT
   USING (
     patient_id IN (
-      SELECT patient_id FROM care_assignments
+      SELECT patient_id
+      FROM care_assignments
       WHERE clinician_id = current_setting('app.actor_id', true)::uuid
         AND revoked_at IS NULL
     )
   );
 ```
 
-The request-scoped database session sets the actor identity with
-`SET LOCAL app.actor_id = :actor` (`app/db/session.py`) before any other
-statement in the transaction runs. `SET LOCAL`, not `SET`: the setting is
-scoped to the current transaction and is unset automatically at COMMIT or
-ROLLBACK, so a connection handed back to a pool can never carry a stale
-actor identity into a different request. The API and worker connect as a
-`clinical_runtime` role that is **not** the schema owner and has
-`FORCE ROW LEVEL SECURITY` applied against it — the owner role
-(`clinical_app`) only ever runs migrations, so there's no privileged
-connection path that could accidentally bypass the policy.
+The request-scoped database session sets the actor identity using:
 
-**Why not just an application-level check?** Two reasons, both load-
-bearing:
+```sql
+SET LOCAL app.actor_id = :actor
+```
 
-1. **Defense in depth.** The API *also* runs an explicit
-   `require_patient_assignment` check before the query — RLS is the
-   backstop, not a replacement. Application-only checks are one new route
-   away from a leak; RLS-only checks turn "not your patient" into a
-   silent empty result instead of a 403.
-2. **Scoping has to happen *inside* the query, not as a post-filter.**
-   `app/services/retrieval.py`'s vector search puts `patient_id = :id` in
-   the same `WHERE` clause as the `ORDER BY embedding <=> :q` — the index
-   scan itself never visits another patient's rows. A retrieval system
-   that runs similarity search first and filters results afterward still
-   does the (wasted) work over every patient's vectors, and a single
-   missed filter step leaks another patient's evidence into the answer.
-   `tests/security/test_retrieval_scoping.py` proves this with a query
-   engineered to match the *other* patient's text better than the
-   target's own.
+`SET LOCAL` keeps the identity scoped to the current transaction. When the transaction commits or rolls back, the setting disappears, preventing a pooled database connection from carrying one request's identity into another request.
 
-**Ingestion is admin-only**, not open to clinicians. The worker writes a
-FHIR bundle with a service role that bypasses per-clinician RLS, so
-allowing clinicians to enqueue arbitrary bundles would be a path around
-the authorization model above — a clinician could otherwise POST a bundle
-for *any* patient, not just their own assignments. Per-patient ingest
-authorization would need the patient identity resolved synchronously
-before enqueue; see Known limitations.
+The runtime API/worker role is deliberately separate from the migration role and operates with Row-Level Security enforced.
 
-See `docs/adr/0001-postgres-rls-over-application-authz.md` for the full
-reasoning, and `docs/adr/0005-audit-write-in-read-transaction.md` for why
-every read also writes an audit row in the same transaction (auditability
-over availability, deliberately).
+### Why both application authorization and RLS?
 
-## Security tests
+The application performs an explicit patient-assignment check before the query, while PostgreSQL RLS provides the database-level backstop.
 
-**Start here:** [`tests/security/`](tests/security/) — every filename
-states its own claim.
+This gives two layers of protection:
 
-- `test_cross_patient_isolation.py` — the test that matters most. A
-  clinician assigned to patient A can never read patient B's documents,
-  record, or query answers, and the 403 body leaks nothing (`patient_id`
-  never appears, not even in the error's `instance` field — routes are
-  templated, not resolved-path, in every error response).
-- `test_phi_egress.py` — proves no HIPAA Safe Harbor identifier (name,
-  precise date, MRN, phone, email, SSN, street address) appears in the
-  text actually sent to the LLM, captured via a scripted client double.
-  > This is rule-based redaction of selected Safe Harbor identifier
-  > patterns before text leaves the service boundary, with deterministic
-  > pseudonyms so the model can still reason about "Patient A"
-  > consistently — defense in depth, not a certified Safe Harbor
-  > de-identification claim. Full de-identification needs a trained NER
-  > model and a validation set.
-- `test_retrieval_scoping.py` — proves the vector search itself is
-  scoped in-query (see "Authorization model" above), not by
-  post-filtering results.
-- `test_query_audit.py` — proves `/query` writes exactly one audit row
-  per call.
+1. **Application authorization** produces an explicit `403` when a clinician requests another patient's data.
+2. **Database RLS** prevents an accidental application-level omission from exposing another patient's rows.
 
-Also: `tests/concurrency/` (the optimistic-lock race),
-`tests/unit/` (pagination cursor codec, circuit breaker),
-`tests/contract/` (every non-2xx response is one consistent JSON error
-shape; `/openapi.json` has an example on every endpoint), and
-`tests/integration/` (real Postgres + Redis, worker crash recovery, rate
-limiting, breaker degradation, retrieval-only config).
+Patient scoping is also performed directly inside the retrieval query rather than retrieving arbitrary vectors first and filtering them afterward.
 
-**On the `grounded` field:** `grounded: true` means the answer cites at
-least one retrieved chunk, or explicitly refuses. It's a citation-presence
-check, not claim-level verification that every sentence in the answer
-maps to a chunk.
+---
 
-**On the default embedder:** `HashingEmbedder` is deterministic feature
-hashing, not a learned model. It produces real vectors with real cosine
-structure, so every code path — the HNSW index, the vector search itself
-— is the production path. But it captures lexical overlap, not learned
-semantic understanding: "heart attack" and "myocardial infarction" would
-not match. `OpenAIEmbeddingClient` is implemented and is a one-line swap
-in startup wiring; see `docs/adr/0006-deterministic-hashing-embedder-default.md`.
+# Patient-scoped retrieval
 
-## Run locally
+The vector search is scoped to the requested patient as part of the database query.
+
+Conceptually:
+
+```sql
+WHERE patient_id = :patient_id
+ORDER BY embedding <=> :query_embedding
+```
+
+This means the retrieval operation itself does not search across unrelated patients and then attempt to filter the results afterward.
+
+The security test suite includes a retrieval-scoping test specifically designed to verify this behavior.
+
+---
+
+# Ingestion
+
+FHIR ingestion is restricted to the admin role.
+
+The flow is:
+
+```text
+Admin
+  ↓
+FHIR Bundle
+  ↓
+API
+  ↓
+Idempotency check
+  ↓
+Queue
+  ↓
+Background Worker
+  ↓
+Parse / Chunk / Embed
+  ↓
+PostgreSQL + pgvector
+```
+
+The API returns a job identifier so ingestion can be processed asynchronously rather than keeping the HTTP request open for the entire ingestion operation.
+
+The worker handles retries and exposes job status for polling.
+
+---
+
+# LLM integration
+
+The generation layer is intentionally kept behind an interface.
+
+There is a null implementation for environments where no model API key is configured and a real provider implementation for generation.
+
+The current public deployment uses the null/retrieval-only path.
+
+When a real LLM is configured:
+
+```text
+Patient-scoped retrieval
+        ↓
+Relevant clinical evidence
+        ↓
+PHI redaction
+        ↓
+LLM
+        ↓
+Answer + evidence
+```
+
+The service does not send the raw retrieved clinical text directly to the external model.
+
+### Important limitation
+
+The PHI protection implemented here is **rule-based redaction of selected identifier patterns**. It is a defense-in-depth mechanism, not a claim of certified HIPAA Safe Harbor de-identification.
+
+A production de-identification system would require substantially more validation, including broader entity recognition and a validation dataset.
+
+---
+
+# Embeddings
+
+The default `HashingEmbedder` is deterministic feature hashing rather than a learned embedding model.
+
+It produces actual vectors that can be stored in pgvector and queried through the same vector-retrieval path used by the service.
+
+However, it should not be described as semantic understanding.
+
+For example, lexical feature hashing does not guarantee that:
+
+```text
+"heart attack"
+```
+
+and:
+
+```text
+"myocardial infarction"
+```
+
+will be recognized as semantically equivalent.
+
+A real embedding provider implementation is available behind the same embedding interface and can replace the deterministic default through configuration/startup wiring.
+
+---
+
+# Reliability
+
+The service contains several mechanisms for handling failures and retries.
+
+### Circuit breaker
+
+The LLM generation path is protected by a circuit breaker.
+
+When generation repeatedly fails, the service can enter a degraded state and serve retrieval-only evidence rather than repeatedly attempting an unavailable model.
+
+### Rate limiting
+
+The API uses a Redis-backed token-bucket rate limiter so rate-limit state can be shared across API processes.
+
+### Idempotency
+
+Ingestion requests accept an idempotency key so clients can safely retry requests without intentionally creating duplicate jobs.
+
+### Optimistic locking
+
+Document updates use optimistic concurrency control. Conflicting updates return `409` rather than silently overwriting another writer's changes.
+
+---
+
+# Audit logging
+
+Clinical-data reads generate audit records.
+
+The audit write occurs in the same transaction as the clinical read.
+
+This deliberately prioritizes audit consistency: a successful clinical-data read should not commit while its corresponding audit record fails to persist.
+
+---
+
+# Security tests
+
+Start with:
+
+```text
+tests/security/
+```
+
+Important tests include:
+
+### `test_cross_patient_isolation.py`
+
+Verifies that a clinician assigned to Patient A cannot retrieve Patient B's records, documents, or query results.
+
+It also verifies that the `403` response does not expose the other patient's identifier.
+
+### `test_phi_egress.py`
+
+Verifies that selected clinical identifiers are removed before the text is sent to the LLM, using a scripted client double.
+
+### `test_retrieval_scoping.py`
+
+Verifies that patient scoping happens inside the vector retrieval query rather than as a post-filter.
+
+### `test_query_audit.py`
+
+Verifies that a query produces the expected audit record.
+
+Other test groups cover:
+
+```text
+tests/concurrency/
+tests/unit/
+tests/contract/
+tests/integration/
+```
+
+These cover areas such as optimistic-lock races, circuit-breaker behavior, pagination, API error contracts, real PostgreSQL/Redis integration, worker recovery, rate limiting, and retrieval-only degradation.
+
+---
+
+# Testing
+
+The current test suite contains:
+
+```text
+140 passed
+```
+
+The suite includes:
+
+- security tests
+- integration tests
+- unit tests
+- concurrency tests
+- API contract tests
+- LLM client tests
+- circuit-breaker tests
+- retrieval tests
+- worker tests
+- database/RLS tests
+
+CI also runs static checks such as:
+
+```text
+ruff
+mypy --strict
+pytest
+```
+
+---
+
+# Performance
+
+The repository contains a historical k6 performance experiment under:
+
+```text
+benchmarks/
+```
+
+That experiment was performed against an earlier version of the system and should **not** be interpreted as a current production performance claim.
+
+In particular, the earlier experiment included a cache layer that has since been removed.
+
+The benchmark remains in the repository as engineering documentation of the investigation process: it records the original measurements, the attempted optimization, the profiling work, and the conclusions about where the observed latency came from.
+
+The important lesson from the experiment was that the initial latency improvement was primarily related to process saturation rather than simply adding a cache or vector index.
+
+See `benchmarks/README.md` for the complete historical analysis.
+
+---
+
+# Run locally
+
+Clone the repository:
 
 ```bash
-git clone https://github.com/hariharan-sabapathi/clinical-evidence-api && cd clinical-evidence-api
+git clone https://github.com/hariharan-sabapathi/Clinical-Evidence-Api
+cd Clinical-Evidence-Api
+```
+
+Start the services:
+
+```bash
 docker compose up
 ```
 
-That starts Postgres (with pgvector + the two-role split bootstrapped via
-`docker/init-db.sql`), Redis, runs migrations to head, then starts the API
-(`:8000`) and the arq worker. Seed demo data (a couple of patients, four
-users covering each role) in a second terminal:
+This starts:
+
+```text
+PostgreSQL + pgvector
+Redis
+FastAPI
+arq worker
+```
+
+Run the demo seed profile in another terminal:
 
 ```bash
 docker compose --profile seed up seed
 ```
 
-Demo logins (email / password): `clinician.a@example.org` /
-`clinician-a-pass`, `auditor@example.org` / `auditor-pass`,
-`admin@example.org` / `admin-pass` — see `scripts/seed_demo_data.py` for
-the full list and what each is assigned to.
+The seeded environment provides demo users for the clinician, auditor, and admin roles.
 
-**Environment constraints in this deployment:** no LLM API key is
-configured (same constraint the retrieval library's own README notes for
-its offline evaluation) and this sandbox's network policy blocks the
-Docker Hub/k6.io CDN pulls `docker compose up` and a packaged k6 binary
-would normally use. Every piece of this system was still built and
-verified end-to-end: Postgres 16 + pgvector and Redis installed directly
-via `apt`, k6 built from source via `go install go.k6.io/k6@latest`
-(the Go module proxy *is* reachable), and the full request lifecycle —
-auth, RLS-scoped reads, async ingestion with a real arq worker, the
-circuit breaker, the rate limiter, all three k6 runs — exercised against
-those directly. `docker-compose.yml`/`Dockerfile` describe exactly that
-same setup for an environment with normal registry access; nothing in
-them is unverified guesswork. With `LLM_MODEL`/`LLM_API_KEY` set,
-`/query` calls a real model; without one, it runs in the same
-retrieval-only mode the CLI's `NullLLMClient` always has.
+---
 
-Once it's running, exercise the whole request lifecycle from the command line:
+# Example request flow
+
+Once the API is running:
 
 ```bash
 BASE=http://localhost:8000
-
-# 1. Authenticate
-TOKEN=$(curl -s -X POST $BASE/v1/auth/token \
-  -d "username=clinician.a@example.org&password=clinician-a-pass" \
-  -H "Content-Type: application/x-www-form-urlencoded" | jq -r .access_token)
-
-# 2. List my assigned patients (cursor-paginated)
-curl -s $BASE/v1/patients -H "Authorization: Bearer $TOKEN" | jq
-PATIENT_ID=$(curl -s $BASE/v1/patients -H "Authorization: Bearer $TOKEN" | jq -r '.items[0].id')
-
-# 3. Ask a grounded question
-curl -s -X POST $BASE/v1/patients/$PATIENT_ID/query \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"q": "what medication is prescribed for diabetes?"}' | jq
-
-# 4. Ingest a FHIR bundle asynchronously (admin only, idempotent)
-ADMIN_TOKEN=$(curl -s -X POST $BASE/v1/auth/token \
-  -d "username=admin@example.org&password=admin-pass" \
-  -H "Content-Type: application/x-www-form-urlencoded" | jq -r .access_token)
-curl -s -i -X POST $BASE/v1/ingest/bundles \
-  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -H "Idempotency-Key: $(uuidgen)" -d @bundle.json
-# -> 202, Location: /v1/ingest/jobs/{job_id}
 ```
 
-## Known limitations
+### 1. Authenticate
 
-One line each — the prepared answer to "what would you improve?":
+```bash
+TOKEN=$(curl -s -X POST $BASE/v1/auth/token \
+  -d "username=clinician.a@example.org&password=clinician-a-pass" \
+  -H "Content-Type: application/x-www-form-urlencoded" |
+  jq -r .access_token)
+```
 
-- Per-patient ingest authorization: ingestion is admin-only rather than
-  resolving patient identity synchronously before enqueue
-- The `/query` transaction stays open across the model call; at real
-  concurrency that should be split so the DB connection is released first
-- Idempotency reservation is check-then-insert, not atomic — concurrent
-  identical requests can both enqueue
-- RLS covers `documents`; `patients` relies on application-level scoping
-- Refresh-token rotation has no concurrency guard
-- Circuit breaker state is per-process and doesn't share across replicas
-- `/v1/auth/token` isn't rate-limited
+### 2. List assigned patients
 
-## What breaks at 100x
+```bash
+curl -s $BASE/v1/patients \
+  -H "Authorization: Bearer $TOKEN" |
+  jq
+```
 
-Honest answer, not a marketing one:
+### 3. Query patient evidence
 
-- **This benchmark's own corpus (18,000 chunks) wasn't large enough to
-  make the vector index the bottleneck** — see "Performance" above: at
-  300 chunks/patient the sequential scan was already low-single-digit
-  milliseconds, which is exactly why the earlier cache+index experiment
-  barely moved the number. At 100x the per-patient chunk count, that stops
-  being true and the HNSW index becomes load-bearing, pushing more load
-  onto retrieval + generation. The circuit breaker's retrieval-only floor
-  exists precisely so generation capacity, not correctness, degrades
-  gracefully first once that happens.
-- **A single Postgres primary** becomes the ceiling before anything else
-  does — every RLS-scoped read and every audit write goes through it.
-  Read replicas would need RLS's session variable propagated per-
-  connection (it's transaction-local by design, so this isn't free), and
-  audit writes specifically can't move to a replica at all without
-  breaking the "audit write is in the same transaction as the read" (ADR
-  0005) invariant that this design otherwise leans on hard.
-- **The single arq worker process** processes one bundle at a time;
-  100x ingestion volume needs more worker processes (arq scales
-  horizontally by running more of them against the same Redis queue —
-  no code change), but also a real embedding model call at that volume,
-  which the current `HashingEmbedder` sidesteps entirely (see ADR 0006).
-- **The in-process circuit breaker's state doesn't share across
-  instances.** Running N API replicas behind a load balancer means each
-  replica opens its breaker independently — a real production version
-  behind heavier load would move breaker state into Redis so the whole
-  fleet degrades together instead of only the replica that happened to
-  see the failures.
-- **The token-bucket rate limiter is already Redis-backed and
-  horizontally correct** (that's the whole reason it's a Lua script
-  instead of in-process state) — this one *doesn't* need rework at 100x.
+```bash
+PATIENT_ID=$(curl -s $BASE/v1/patients \
+  -H "Authorization: Bearer $TOKEN" |
+  jq -r '.items[0].id')
 
-## Architecture / ADRs
+curl -s -X POST \
+  $BASE/v1/patients/$PATIENT_ID/query \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"q":"what medication is prescribed for diabetes?"}' |
+  jq
+```
 
-**Main query flow:**
+### 4. Try another patient's records
+
+Using a patient outside the clinician's assignment should return:
+
+```text
+403 Forbidden
+```
+
+This is the simplest way to see the authorization model in action.
+
+---
+
+# Known limitations
+
+The current implementation intentionally has several limitations:
+
+- Ingestion is admin-only rather than resolving patient identity synchronously before enqueue.
+- The `/query` transaction remains open across the model call; at higher concurrency this should be split so the database connection can be released before generation.
+- The idempotency reservation is not fully atomic against concurrent identical requests.
+- RLS currently protects the document access path; some patient-level access relies on application-level authorization.
+- Refresh-token rotation does not currently include a concurrency guard.
+- Circuit-breaker state is process-local and does not automatically synchronize across API replicas.
+- `/v1/auth/token` is not currently rate-limited.
+
+These are documented limitations rather than hidden gaps.
+
+---
+
+# What breaks at 100x?
+
+The current architecture has clear scaling boundaries.
+
+### PostgreSQL
+
+PostgreSQL becomes a major bottleneck as the number of patient records, vector chunks, and audit writes grows.
+
+Every RLS-scoped read and audit write currently goes through the primary database.
+
+### Retrieval
+
+The current benchmark corpus was not large enough for vector retrieval to become the dominant bottleneck.
+
+At substantially larger per-patient chunk counts, vector indexing and retrieval become more important to overall latency.
+
+### Background ingestion
+
+The current deployment uses a worker process to process ingestion jobs.
+
+At significantly higher ingestion volume, additional worker processes can consume the same queue.
+
+### Circuit breaker
+
+The circuit breaker is process-local.
+
+With multiple API replicas, each replica maintains its own breaker state. A larger deployment would likely move breaker state into a shared store so the fleet can degrade consistently.
+
+### Rate limiting
+
+The rate limiter is already Redis-backed, so its state can be shared across API processes.
+
+---
+
+# Architecture
+
+## Main query flow
 
 ```text
 Client
@@ -359,12 +569,12 @@ Relevant Evidence
   ↓
 PHI Redaction
   ↓
-LLM
+LLM (when configured)
   ↓
 JSON Answer + Evidence
 ```
 
-**Ingestion flow:**
+## Ingestion flow
 
 ```text
 Admin
@@ -380,35 +590,76 @@ Parse / Chunk / Embed
 PostgreSQL
 ```
 
-**Supporting components:**
+## Supporting components
 
 ```text
-Redis        → Rate Limiting
-Prometheus   → API Metrics
-Audit        → Clinical-data Access Records
+Redis       → Rate Limiting + Ingestion Queue
+Prometheus  → API Metrics
+PostgreSQL  → Application Data + RLS + pgvector
+Audit       → Clinical-data Access Records
 ```
 
-Request lifecycle, ERD, dependency rationale, the zero-downtime migration
-pattern, and a failure-modes table are in
-[ARCHITECTURE.md](ARCHITECTURE.md). Individual design decisions and their
-tradeoffs are in [`docs/adr/`](docs/adr/).
+More detailed request lifecycle documentation, the ERD, dependency decisions, migration design, and failure modes are documented in:
 
-## Repository layout
-
+```text
+ARCHITECTURE.md
 ```
-app/                  the service (this document's subject)
-  api/v1/             route handlers
-  services/           auth, retrieval, generation, reliability
-  models/, schemas/   SQLAlchemy models / Pydantic schemas
-  workers/            arq worker + settings
-  observability/      logging, metrics
-alembic/versions/     migrations, including the RLS policy and the
-                      three-step zero-downtime pattern (0004-0006)
+
+Individual architecture decisions and tradeoffs are documented in:
+
+```text
+docs/adr/
+```
+
+---
+
+# Repository layout
+
+```text
+app/
+  api/v1/              route handlers
+  services/            auth, retrieval, generation, reliability
+  models/, schemas/    SQLAlchemy models / Pydantic schemas
+  workers/             arq worker and settings
+  observability/       logging and metrics
+
+alembic/
+  versions/            database migrations and RLS policies
+
 tests/
-  security/           start here
-  concurrency/ unit/ contract/ integration/
-benchmarks/           k6 script + before/after results
-docs/adr/             architecture decision records
-src/clinical_retrieval/   the retrieval library this service wraps
-                          (its own README: README-retrieval-library.md)
+  security/            authorization and data-isolation tests
+  concurrency/         concurrent-update tests
+  unit/                unit tests
+  contract/            API contract tests
+  integration/         PostgreSQL/Redis integration tests
+
+benchmarks/             k6 performance experiments
+docs/adr/               architecture decision records
+
+src/clinical_retrieval/ retrieval library used by the service
 ```
+
+---
+
+## Project focus
+
+This project is intentionally not just an LLM wrapper.
+
+The LLM is one component inside a larger backend system that has to deal with:
+
+- authorization
+- database isolation
+- vector retrieval
+- asynchronous work
+- retries
+- rate limiting
+- concurrency
+- auditing
+- observability
+- failure handling
+- testing
+- deployment
+
+The central design goal is simple:
+
+> **The system should remain correct and safe even when individual components — especially the LLM — are unavailable.**
